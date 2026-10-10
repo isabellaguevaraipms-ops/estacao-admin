@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Administrativo | Estação Alegria</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">☀</div>
+      <div>
+        <h2>Estação Alegria</h2>
+        <span>Painel do proprietário</span>
+      </div>
+    </div>
+
+    <nav>
+      <button class="nav-item active" data-page="inicio">▦ <span>Visão geral</span></button>
+      <button class="nav-item" data-page="fotos">▧ <span>Fotos</span></button>
+      <button class="nav-item" data-page="eventos">◷ <span>Eventos</span></button>
+      <button class="nav-item" data-page="promocoes">✦ <span>Promoções</span></button>
+      <button class="nav-item" data-page="avisos">♧ <span>Avisos</span></button>
+      <button class="nav-item" data-page="configuracoes">⚙ <span>Configurações</span></button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="status-dot"></div>
+      <div>
+        <strong>Área administrativa</strong>
+        <small>Estação Alegria</small>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">ESTAÇÃO ALEGRIA / ADMINISTRAÇÃO</span>
+        <h1 id="page-title">Visão geral</h1>
+      </div>
+      <a class="preview-link" href="#" id="preview-link">Visualizar site ↗</a>
+    </header>
+
+    <section class="welcome">
+      <div>
+        <span class="welcome-tag">SEU ESPAÇO, SUAS REGRAS</span>
+        <h2>Olá, proprietário! 👋</h2>
+        <p>Gerencie as novidades que os visitantes verão no site.</p>
+      </div>
+        <div class="sun-art">☀️</div>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card">
+        <div class="stat-icon orange">▧</div>
+        <span>Fotos adicionadas</span>
+        <strong id="total-fotos">0</strong>
+        <small>Na galeria deste navegador</small>
+      </article>
+      <article class="stat-card">
+        <div class="stat-icon blue">◷</div>
+        <span>Eventos publicados</span>
+        <strong id="total-eventos">0</strong>
+        <small>Eventos cadastrados</small>
+      </article>
+      <article class="stat-card">
+        <div class="stat-icon pink">✦</div>
+        <span>Promoções ativas</span>
+        <strong id="total-promocoes">0</strong>
+        <small>Promoções cadastradas</small>
+      </article>
+      <article class="stat-card">
+        <div class="stat-icon green">♧</div>
+        <span>Avisos publicados</span>
+        <strong id="total-avisos">0</strong>
+        <small>Avisos cadastrados</small>
+      </article>
+    </section>
+
+    <section class="content-panel">
+      <div class="panel-heading">
+        <div>
+          <span class="eyebrow">GERENCIAMENTO</span>
+          <h2 id="section-title">Conteúdo do estabelecimento</h2>
+        </div>
+        <span class="demo-badge">VERSÃO INICIAL</span>
+      </div>
+
+      <div class="notice">
+        <strong>Importante:</strong> este é o painel inicial para testar o visual.
+        Os dados ficam salvos somente neste navegador. Ainda precisamos conectar
+        um banco de dados, armazenamento de imagens e login seguro para que o
+        proprietário publique conteúdo para todos os visitantes.
+      </div>
+
+      <div id="page-content"></div>
+    </section>
+
+    <footer>Estação Alegria © 2026 · Painel administrativo</footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
