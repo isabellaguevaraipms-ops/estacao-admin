@@ -733,3 +733,150 @@ body,
   transition: background-color .3s ease, color .3s ease,
               border-color .3s ease;
 }
+
+/* TELA DE LOGIN */
+body:not(.authenticated) .sidebar,
+body:not(.authenticated) .main {
+  display: none;
+}
+
+.auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+  background:
+    radial-gradient(ellipse at 90% 5%, #c9f5ee 0, transparent 40%),
+    #f2fbfa;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 34px;
+  border: 2px solid #e0f2ee;
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 18px 60px #21465315;
+}
+
+.auth-logo {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 22px;
+  background: #ffd45c;
+  font-size: 35px;
+}
+
+.auth-eyebrow {
+  margin: 0;
+  color: #129eae;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.8px;
+  text-align: center;
+}
+
+.auth-card h1 {
+  margin: 10px 0;
+  font-size: 27px;
+  text-align: center;
+}
+
+.auth-description {
+  margin: 0 0 24px;
+  color: #718991;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.auth-card label {
+  display: block;
+  margin: 15px 0 7px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.auth-card input {
+  width: 100%;
+  padding: 13px;
+  border: 2px solid #e3eeed;
+  border-radius: 12px;
+  outline: none;
+  background: #fbfefe;
+  color: #214653;
+}
+
+.auth-card input:focus {
+  border-color: #23b9cf;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+}
+
+.auth-switch {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: #087f91;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-message {
+  margin: 12px 0 0;
+  color: #b33b3b;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.auth-message:empty {
+  display: none;
+}
+
+body.dark-theme .auth-screen {
+  background:
+    radial-gradient(ellipse at 90% 5%, #15385b 0, transparent 40%),
+    #081526;
+}
+
+body.dark-theme .auth-card {
+  background: #102139;
+  border-color: #243b59;
+  color: #e5efff;
+}
+
+body.dark-theme .auth-description {
+  color: #a3b7d6;
+}
+
+body.dark-theme .auth-card input {
+  background: #0b192b;
+  border-color: #304967;
+  color: #e5efff;
+}
+
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 25px 20px;
+  }
+
+  .auth-card h1 {
+    font-size: 23px;
+  }
+}
