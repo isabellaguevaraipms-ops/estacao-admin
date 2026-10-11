@@ -31,7 +31,8 @@ const TITLES = {
   fotos: "Fotos e vídeos",
   eventos: "Eventos",
   promocoes: "Promoções",
-  avisos: "Avisos"
+  avisos: "Avisos",
+  avaliacoes: "Avaliações"
 };
 
 const SECTION_TITLES = {
