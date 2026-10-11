@@ -24,7 +24,7 @@ Object.keys(initialData).forEach(key => {
 
 const titles = {
   inicio: "Visão geral",
-  fotos: "Galeria de fotos",
+  fotos: "Galeria de fotos e vídeos",
   eventos: "Eventos",
   promocoes: "Promoções",
   avisos: "Avisos",
@@ -73,6 +73,60 @@ function escapeHTML(value) {
 }
 
 // ==========================================
+// IDENTIFICAR FOTOS E VÍDEOS
+// ==========================================
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const PHOTO_BUCKET = "foto";
+
+const allowedImageExtensions = [
+  "jpg", "jpeg", "png", "webp", "gif", "avif"
+];
+
+const allowedVideoExtensions = [
+  "mp4", "webm", "mov", "m4v", "ogv", "ogg"
+];
+
+function getExtension(filename = "") {
+  return filename.split(".").pop().toLowerCase();
+}
+
+function isVideoFile(filename = "", mimeType = "") {
+  const extension = getExtension(filename);
+
+  return (
+    mimeType.startsWith("video/") ||
+    allowedVideoExtensions.includes(extension)
+  );
+}
+
+function isAllowedFile(file) {
+  const extension = getExtension(file.name);
+
+  const allowedExtensions = [
+    ...allowedImageExtensions,
+    ...allowedVideoExtensions
+  ];
+
+  if (!allowedExtensions.includes(extension)) {
+    return false;
+  }
+
+  // Se o navegador não informar o MIME, usamos a extensão.
+  if (!file.type) return true;
+
+  if (allowedImageExtensions.includes(extension)) {
+    return file.type.startsWith("image/");
+  }
+
+  if (allowedVideoExtensions.includes(extension)) {
+    return file.type.startsWith("video/");
+  }
+
+  return false;
+}
+
+// ==========================================
 // SUPABASE
 // ==========================================
 
@@ -80,17 +134,12 @@ const SUPABASE_URL =
   "https://ggxhghszthcgnkecoiir.supabase.co";
 
 const SUPABASE_PUBLISHABLE_KEY =
-  "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
+  "sb_publishable_EohrXK6tulCPMKavk5G5Gfw_OxIQkxgQ";
 
 const supabaseClient = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY
 );
-
-// Nome do bucket de imagens: foto
-// Nome da tabela de registros: fotos
-
-const PHOTO_BUCKET = "foto";
 
 // ==========================================
 // CARREGAR DADOS DO BANCO
@@ -140,8 +189,9 @@ async function loadPhotos() {
     title: row.nome || "",
     description: "",
     image: row.imagem_url || "",
-    storagePath: row.storage_path,
-    createdAt: row.created_at
+    storagePath: row.storage_path || "",
+    createdAt: row.created_at,
+    isVideo: isVideoFile(row.storage_path || row.imagem_url || "")
   }));
 
   updateStats();
@@ -204,19 +254,19 @@ function renderPage(page) {
         <div class="form-card">
           <h3>Comece por aqui ☀️</h3>
           <p>
-            Use o menu lateral para cadastrar fotos,
-            eventos, promoções e avisos.
+            Cadastre fotos, vídeos, eventos, promoções
+            e avisos para os visitantes.
           </p>
           <button class="primary-btn" data-go="fotos">
-            Adicionar fotos
+            Adicionar foto ou vídeo
           </button>
         </div>
 
         <div class="form-card">
           <h3>Publicações na nuvem 🔗</h3>
           <p>
-            Fotos, eventos, promoções e avisos são
-            carregados do Supabase.
+            Os conteúdos são carregados do Supabase
+            e podem aparecer no site dos clientes.
           </p>
           <button class="primary-btn" data-go="eventos">
             Cadastrar evento
@@ -242,8 +292,7 @@ function renderPage(page) {
           <strong>Banco de dados:</strong> Supabase
         </p>
         <p>
-          <strong>Galeria de fotos:</strong>
-          armazenamento em nuvem pelo Supabase.
+          <strong>Galeria:</strong> fotos e vídeos na nuvem.
         </p>
       </div>`;
     return;
@@ -259,35 +308,46 @@ function renderPage(page) {
 function renderManager(type) {
   const config = {
     fotos: {
-      title: "Adicionar foto",
+      title: "Adicionar foto ou vídeo",
       fields: `
         <div class="field">
-          <label for="item-title">Título da foto</label>
+          <label for="item-title">Título ou legenda</label>
           <input
             id="item-title"
             name="title"
-            placeholder="Ex.: Nossa piscina"
+            placeholder="Ex.: Nossa piscina no verão"
+            maxlength="160"
             required
           >
         </div>
 
         <div class="field">
-          <label for="item-image">Selecionar imagem</label>
+          <label for="item-image">Selecionar foto ou vídeo</label>
           <input
             id="item-image"
             name="image"
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg"
             required
           >
+          <small>
+            Fotos: JPG, PNG, WEBP, GIF ou AVIF.
+            Vídeos: MP4, WEBM, MOV ou OGG.
+            Limite de 50 MB por arquivo.
+          </small>
+        </div>
+
+        <div class="field" id="media-preview-container" hidden>
+          <label>Pré-visualização</label>
+          <div id="media-preview"></div>
         </div>
 
         <div class="field">
-          <label for="item-description">Descrição</label>
+          <label for="item-description">Descrição (opcional)</label>
           <textarea
             id="item-description"
             name="description"
-            placeholder="Conte um pouco sobre a foto"
+            placeholder="Conte um pouco sobre o conteúdo"
           ></textarea>
         </div>`
     },
@@ -395,7 +455,7 @@ function renderManager(type) {
         <p>
           ${
             type === "fotos"
-              ? "As fotos são enviadas ao Supabase e ficam disponíveis na galeria pública."
+              ? "Fotos e vídeos são enviados ao Supabase Storage e registrados na tabela fotos."
               : "Os dados são salvos no banco de dados do Supabase."
           }
         </p>
@@ -409,7 +469,73 @@ function renderManager(type) {
     .getElementById("item-form")
     .addEventListener("submit", handleSubmit);
 
+  if (type === "fotos") {
+    setupMediaPreview();
+  }
+
   renderItems(type);
+}
+
+// ==========================================
+// PRÉ-VISUALIZAÇÃO DO ARQUIVO
+// ==========================================
+
+let previewObjectUrl = null;
+
+function setupMediaPreview() {
+  const input = document.getElementById("item-image");
+  const container = document.getElementById(
+    "media-preview-container"
+  );
+  const preview = document.getElementById("media-preview");
+
+  input.addEventListener("change", () => {
+    preview.innerHTML = "";
+
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = null;
+    }
+
+    const file = input.files?.[0];
+
+    if (!file) {
+      container.hidden = true;
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE || !isAllowedFile(file)) {
+      container.hidden = true;
+      input.value = "";
+      alert(
+        "Arquivo inválido. Escolha uma foto ou um vídeo permitido de até 50 MB."
+      );
+      return;
+    }
+
+    previewObjectUrl = URL.createObjectURL(file);
+    container.hidden = false;
+
+    if (isVideoFile(file.name, file.type)) {
+      preview.innerHTML = `
+        <video
+          src="${previewObjectUrl}"
+          controls
+          playsinline
+          preload="metadata"
+          style="max-width:100%;max-height:320px;border-radius:12px"
+        ></video>
+      `;
+    } else {
+      preview.innerHTML = `
+        <img
+          src="${previewObjectUrl}"
+          alt="Pré-visualização da foto"
+          style="max-width:100%;max-height:320px;object-fit:contain;border-radius:12px"
+        >
+      `;
+    }
+  });
 }
 
 // ==========================================
@@ -450,21 +576,22 @@ async function handleSubmit(event) {
   submitButton.textContent = "Salvando...";
 
   try {
-    // FOTOS: upload para Storage e registro na tabela.
     if (type === "fotos") {
       const file = formData.get("image");
 
-      if (
-        !file ||
-        typeof file.type !== "string" ||
-        !file.type.startsWith("image/")
-      ) {
-        throw new Error("Selecione uma imagem válida.");
+      if (!file || !file.name) {
+        throw new Error("Selecione uma foto ou um vídeo.");
       }
 
-      if (file.size > 50 * 1024 * 1024) {
+      if (file.size > MAX_FILE_SIZE) {
         throw new Error(
-          "Escolha uma imagem de até 700 KB."
+          "O arquivo excede o limite de 50 MB."
+        );
+      }
+
+      if (!isAllowedFile(file)) {
+        throw new Error(
+          "Formato não permitido. Use JPG, PNG, WEBP, GIF, AVIF, MP4, WEBM, MOV ou OGG."
         );
       }
 
@@ -479,41 +606,36 @@ async function handleSubmit(event) {
         );
       }
 
-      const extensionMatch = file.name.match(
-        /\.([a-zA-Z0-9]+)$/
-      );
-
-      const extension = extensionMatch
-        ? extensionMatch[1].toLowerCase()
-        : "jpg";
-
+      const extension = getExtension(file.name);
       const storagePath =
         `${crypto.randomUUID()}.${extension}`;
 
-      // IMPORTANTE: bucket no singular: foto
       const { error: uploadError } =
         await supabaseClient.storage
           .from(PHOTO_BUCKET)
           .upload(storagePath, file, {
-            contentType: file.type,
+            contentType: file.type || undefined,
+            cacheControl: "3600",
             upsert: false
           });
 
       if (uploadError) throw uploadError;
 
-      // Gera o endereço público do arquivo enviado.
       const { data: publicData } =
         supabaseClient.storage
           .from(PHOTO_BUCKET)
           .getPublicUrl(storagePath);
 
       if (!publicData?.publicUrl) {
+        await supabaseClient.storage
+          .from(PHOTO_BUCKET)
+          .remove([storagePath]);
+
         throw new Error(
-          "Não foi possível gerar o endereço da imagem."
+          "Não foi possível gerar o endereço público do arquivo."
         );
       }
 
-      // IMPORTANTE: a tabela continua no plural: fotos
       const { error: insertError } =
         await supabaseClient
           .from("fotos")
@@ -524,18 +646,9 @@ async function handleSubmit(event) {
           });
 
       if (insertError) {
-        // Tenta remover o arquivo caso o registro falhe.
-        const { error: cleanupError } =
-          await supabaseClient.storage
-            .from(PHOTO_BUCKET)
-            .remove([storagePath]);
-
-        if (cleanupError) {
-          console.error(
-            "Não foi possível remover o arquivo enviado:",
-            cleanupError
-          );
-        }
+        await supabaseClient.storage
+          .from(PHOTO_BUCKET)
+          .remove([storagePath]);
 
         throw insertError;
       }
@@ -544,11 +657,15 @@ async function handleSubmit(event) {
       updateStats();
       renderPage("fotos");
 
-      alert("Foto publicada com sucesso!");
+      alert(
+        isVideoFile(file.name, file.type)
+          ? "Vídeo publicado com sucesso!"
+          : "Foto publicada com sucesso!"
+      );
+
       return;
     }
 
-    // EVENTOS, PROMOÇÕES E AVISOS.
     const table = cloudTables[type];
 
     if (!table) {
@@ -578,6 +695,8 @@ async function handleSubmit(event) {
     updateStats();
     renderPage(type);
 
+    alert("Publicação salva com sucesso!");
+
   } catch (error) {
     console.error("Erro ao salvar:", error);
 
@@ -595,7 +714,7 @@ async function handleSubmit(event) {
 }
 
 // ==========================================
-// LISTAR E EXCLUIR PUBLICAÇÕES
+// LISTAR PUBLICAÇÕES
 // ==========================================
 
 async function renderItems(type) {
@@ -628,47 +747,60 @@ async function renderItems(type) {
       return;
     }
 
-    list.innerHTML = items.map(item => `
-      <article class="item-card">
-        ${
-          type === "fotos" && item.image
-            ? `<img
-                 src="${escapeHTML(item.image)}"
-                 alt="${escapeHTML(item.title)}"
-               >`
-            : ""
-        }
+    list.innerHTML = items.map(item => {
+      const media = type === "fotos" && item.image
+        ? (
+            isVideoFile(
+              item.storagePath || item.image,
+              ""
+            )
+              ? `<video
+                   src="${escapeHTML(item.image)}"
+                   controls
+                   playsinline
+                   preload="metadata"
+                   style="width:100%;max-height:260px;object-fit:contain;border-radius:12px"
+                 ></video>`
+              : `<img
+                   src="${escapeHTML(item.image)}"
+                   alt="${escapeHTML(item.title)}"
+                   loading="lazy"
+                 >`
+          )
+        : "";
 
-        <h3>${escapeHTML(item.title)}</h3>
+      return `
+        <article class="item-card">
+          ${media}
 
-        ${
-          item.date
-            ? `<p>Data: ${escapeHTML(item.date)}</p>`
-            : ""
-        }
+          <h3>${escapeHTML(item.title)}</h3>
 
-        <p>${escapeHTML(item.description || "Sem descrição.")}</p>
+          ${
+            item.date
+              ? `<p>Data: ${escapeHTML(item.date)}</p>`
+              : ""
+          }
 
-        <div class="item-actions">
-          <button
-            class="delete-btn"
-            data-delete="${escapeHTML(item.id)}"
-          >
-            Excluir
-          </button>
-        </div>
-      </article>
-    `).join("");
+          <p>${escapeHTML(item.description || "Sem descrição.")}</p>
+
+          <div class="item-actions">
+            <button
+              class="delete-btn"
+              data-delete="${escapeHTML(item.id)}"
+              type="button"
+            >
+              Excluir
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("");
 
     list.querySelectorAll("[data-delete]").forEach(button => {
       button.addEventListener("click", async () => {
         const id = button.dataset.delete;
 
-        if (
-          !confirm(
-            "Deseja realmente excluir esta publicação?"
-          )
-        ) {
+        if (!confirm("Deseja realmente excluir esta publicação?")) {
           return;
         }
 
@@ -681,34 +813,32 @@ async function renderItems(type) {
             );
 
             if (!photo) {
-              throw new Error("Foto não encontrada.");
+              throw new Error("Arquivo não encontrado.");
             }
 
             if (!photo.storagePath) {
               throw new Error(
-                "Esta foto não possui caminho registrado no Storage. Ela não foi excluída."
+                "O caminho do arquivo não está registrado no Supabase."
               );
             }
 
-            // Remove a imagem do bucket foto.
-            const { error: storageError } =
-              await supabaseClient.storage
-                .from(PHOTO_BUCKET)
-                .remove([photo.storagePath]);
-
-            if (storageError) throw storageError;
-
-            // Remove o registro da tabela fotos.
             const { error: deleteError } =
               await supabaseClient
                 .from("fotos")
                 .delete()
                 .eq("id", id);
 
-            if (deleteError) {
-              throw new Error(
-                "O arquivo foi removido, mas o registro não pôde ser apagado: " +
-                deleteError.message
+            if (deleteError) throw deleteError;
+
+            const { error: storageError } =
+              await supabaseClient.storage
+                .from(PHOTO_BUCKET)
+                .remove([photo.storagePath]);
+
+            if (storageError) {
+              console.error(
+                "O registro foi excluído, mas o arquivo não pôde ser removido:",
+                storageError
               );
             }
 
@@ -734,6 +864,8 @@ async function renderItems(type) {
 
           updateStats();
           renderPage(type);
+
+          alert("Publicação excluída.");
 
         } catch (error) {
           console.error("Erro ao excluir:", error);
@@ -778,7 +910,7 @@ document
     event.preventDefault();
 
     alert(
-      "Na próxima etapa, conectaremos aqui o endereço do site público da Estação Alegria."
+      "Configure o endereço público do site neste link."
     );
   });
 
@@ -1004,7 +1136,10 @@ logoutButton.addEventListener("click", async () => {
   }
 });
 
-// Atualiza a interface quando o login muda.
+// ==========================================
+// RECUPERAR SESSÃO
+// ==========================================
+
 supabaseClient.auth.onAuthStateChange((event, session) => {
   setAuthenticated(Boolean(session));
 
@@ -1026,10 +1161,6 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     updateStats();
   }
 });
-
-// ==========================================
-// RECUPERAR SESSÃO
-// ==========================================
 
 async function restoreAuthSession() {
   setAuthenticated(false);
