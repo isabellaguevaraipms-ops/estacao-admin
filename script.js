@@ -13,7 +13,7 @@
    Não use uma chave secret ou service_role.
 */
 const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "COLE_AQUI_SUA_PUBLISHABLE_KEY";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
 
 const MEDIA_BUCKET = "foto";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
