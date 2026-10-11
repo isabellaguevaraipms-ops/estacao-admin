@@ -40,7 +40,9 @@ const SECTION_TITLES = {
   fotos: "Galeria de fotos e vídeos",
   eventos: "Gerenciar eventos",
   promocoes: "Gerenciar promoções",
-  avisos: "Gerenciar avisos"
+  avisos: "Gerenciar avisos",
+  avaliacoes: "Moderar avaliações dos visitantes"
+};
 };
 
 const state = {
