@@ -884,6 +884,27 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN") {
     // Carrega as publicações da nuvem depois do login.
     setTimeout(() => {
+      
+async function loadPhotos() {
+  const { data: rows, error } = await supabaseClient
+    .from("fotos")
+    .select("id, nome, imagem_url, storage_path, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  data.fotos = (rows || []).map(row => ({
+    id: row.id,
+    title: row.nome,
+    description: "",
+    image: row.imagem_url,
+    storagePath: row.storage_path,
+    createdAt: row.created_at
+  }));
+
+  updateStats();
+}
+
       refreshCloudData();
     }, 0);
   }
