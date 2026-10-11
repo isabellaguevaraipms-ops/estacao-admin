@@ -18,11 +18,8 @@ try {
   data = { ...initialData };
 }
 
-// Garante que todas as categorias existam.
 Object.keys(initialData).forEach(key => {
-  if (!Array.isArray(data[key])) {
-    data[key] = [];
-  }
+  if (!Array.isArray(data[key])) data[key] = [];
 });
 
 const titles = {
@@ -76,7 +73,22 @@ function escapeHTML(value) {
 }
 
 // ==========================================
-// CONEXÃO COM AS TABELAS DO SUPABASE
+// SUPABASE
+// ==========================================
+
+const SUPABASE_URL =
+  "https://ggxhghszthcgnkecoiir.supabase.co";
+
+const SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);
+
+// ==========================================
+// CARREGAR DADOS DO BANCO
 // ==========================================
 
 function fromDatabase(type, row) {
@@ -103,13 +115,31 @@ async function loadCloudItems(type) {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   data[type] = (rows || []).map(row =>
     fromDatabase(type, row)
   );
+}
+
+async function loadPhotos() {
+  const { data: rows, error } = await supabaseClient
+    .from("fotos")
+    .select("id, nome, imagem_url, storage_path, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  data.fotos = (rows || []).map(row => ({
+    id: row.id,
+    title: row.nome || "",
+    description: "",
+    image: row.imagem_url || "",
+    storagePath: row.storage_path,
+    createdAt: row.created_at
+  }));
+
+  updateStats();
 }
 
 async function refreshCloudData() {
@@ -117,19 +147,18 @@ async function refreshCloudData() {
     await Promise.all([
       loadCloudItems("eventos"),
       loadCloudItems("promocoes"),
-      loadCloudItems("avisos")
+      loadCloudItems("avisos"),
+      loadPhotos()
     ]);
 
     updateStats();
 
-    // Atualiza a seção que estiver aberta.
     const activePage = document.querySelector(
       ".nav-item.active"
     )?.dataset.page;
 
     if (
       activePage &&
-      cloudTables[activePage] &&
       document.getElementById("item-list")
     ) {
       renderItems(activePage);
@@ -153,7 +182,7 @@ function renderPage(page) {
     titles[page];
 
   document.getElementById("section-title").textContent =
-    page === "inicio" 
+    page === "inicio"
       ? "Conteúdo do estabelecimento"
       : titles[page];
 
@@ -181,8 +210,8 @@ function renderPage(page) {
         <div class="form-card">
           <h3>Publicações na nuvem 🔗</h3>
           <p>
-            Eventos, promoções e avisos são carregados
-            do banco de dados do Supabase.
+            Fotos, eventos, promoções e avisos são
+            carregados do Supabase.
           </p>
           <button class="primary-btn" data-go="eventos">
             Cadastrar evento
@@ -205,12 +234,11 @@ function renderPage(page) {
           @estacao_alegria_oficial
         </p>
         <p>
-          <strong>Banco de dados:</strong>
-          Supabase
+          <strong>Banco de dados:</strong> Supabase
         </p>
         <p>
           <strong>Galeria de fotos:</strong>
-          armazenamento local neste navegador.
+          armazenamento em nuvem pelo Supabase.
         </p>
       </div>`;
     return;
@@ -220,7 +248,7 @@ function renderPage(page) {
 }
 
 // ==========================================
-// FORMULÁRIOS DE CADASTRO
+// FORMULÁRIOS
 // ==========================================
 
 function renderManager(type) {
@@ -350,7 +378,6 @@ function renderManager(type) {
     <div class="content-grid">
       <form class="form-card" id="item-form">
         <h3>${current.title}</h3>
-
         ${current.fields}
 
         <button class="primary-btn" type="submit">
@@ -363,7 +390,7 @@ function renderManager(type) {
         <p>
           ${
             type === "fotos"
-              ? "As fotos ficam salvas somente neste navegador nesta etapa."
+              ? "As fotos são enviadas ao Supabase e ficam disponíveis na galeria pública."
               : "Os dados são salvos no banco de dados do Supabase."
           }
         </p>
@@ -403,9 +430,7 @@ async function handleSubmit(event) {
     formData.get("description") || ""
   ).trim();
 
-  const date = String(
-    formData.get("date") || ""
-  );
+  const date = String(formData.get("date") || "");
 
   if (!title) {
     alert("Informe um título.");
@@ -420,49 +445,93 @@ async function handleSubmit(event) {
   submitButton.textContent = "Salvando...";
 
   try {
-    // FOTOS: continuam salvas localmente nesta etapa.
+    // FOTOS: upload para Storage e registro na tabela.
     if (type === "fotos") {
       const file = formData.get("image");
 
       if (!file || !file.type.startsWith("image/")) {
-        alert("Selecione um arquivo de imagem válido.");
-        return;
+        throw new Error("Selecione uma imagem válida.");
       }
 
       if (file.size > 700 * 1024) {
-        alert("Escolha uma imagem de até 700 KB.");
-        return;
+        throw new Error(
+          "Escolha uma imagem de até 700 KB."
+        );
       }
 
-      const reader = new FileReader();
+      const { data: sessionData, error: sessionError } =
+        await supabaseClient.auth.getSession();
 
-      reader.onload = () => {
-        data.fotos.unshift({
-          id: crypto.randomUUID(),
-          title,
-          description,
-          image: reader.result,
-          createdAt: new Date().toISOString()
-        });
+      if (sessionError) throw sessionError;
 
-        saveData();
-        renderPage(type);
-      };
+      if (!sessionData.session) {
+        throw new Error(
+          "Sua sessão expirou. Entre novamente no painel."
+        );
+      }
 
-      reader.onerror = () => {
-        alert("Não foi possível ler a imagem.");
-      };
+      const extensionMatch = file.name.match(/\.([a-zA-Z0-9]+)$/);
+      const extension = extensionMatch
+        ? extensionMatch[1].toLowerCase()
+        : "jpg";
 
-      reader.readAsDataURL(file);
+      const storagePath =
+        `${crypto.randomUUID()}.${extension}`;
+
+      const { error: uploadError } =
+        await supabaseClient.storage
+          .from("fotos")
+          .upload(storagePath, file, {
+            contentType: file.type,
+            upsert: false
+          });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } =
+        supabaseClient.storage
+          .from("fotos")
+          .getPublicUrl(storagePath);
+
+      const { error: insertError } =
+        await supabaseClient
+          .from("fotos")
+          .insert({
+            nome: title,
+            imagem_url: publicData.publicUrl,
+            storage_path: storagePath
+          });
+
+      if (insertError) {
+        // Tenta remover o arquivo se o registro falhar.
+        const { error: cleanupError } =
+          await supabaseClient.storage
+            .from("fotos")
+            .remove([storagePath]);
+
+        if (cleanupError) {
+          console.error(
+            "Não foi possível remover o arquivo enviado:",
+            cleanupError
+          );
+        }
+
+        throw insertError;
+      }
+
+      await loadPhotos();
+      updateStats();
+      renderPage("fotos");
+
+      alert("Foto publicada com sucesso!");
       return;
     }
 
-    // EVENTOS, PROMOÇÕES E AVISOS: SUPABASE.
+    // EVENTOS, PROMOÇÕES E AVISOS.
     const table = cloudTables[type];
 
     if (!table) {
-      alert("Tipo de publicação inválido.");
-      return;
+      throw new Error("Tipo de publicação inválido.");
     }
 
     const record = {
@@ -519,6 +588,8 @@ async function renderItems(type) {
   try {
     if (cloudTables[type]) {
       await loadCloudItems(type);
+    } else if (type === "fotos") {
+      await loadPhotos();
     }
 
     if (!list.isConnected) return;
@@ -539,7 +610,10 @@ async function renderItems(type) {
       <article class="item-card">
         ${
           type === "fotos" && item.image
-            ? `<img src="${item.image}" alt="${escapeHTML(item.title)}">`
+            ? `<img
+                 src="${escapeHTML(item.image)}"
+                 alt="${escapeHTML(item.title)}"
+               >`
             : ""
         }
 
@@ -575,7 +649,44 @@ async function renderItems(type) {
         button.disabled = true;
 
         try {
-          if (cloudTables[type]) {
+          if (type === "fotos") {
+            const photo = data.fotos.find(
+              item => String(item.id) === String(id)
+            );
+
+            if (!photo) {
+              throw new Error("Foto não encontrada.");
+            }
+
+            if (!photo.storagePath) {
+              throw new Error(
+                "Esta foto não possui caminho registrado no Storage. Ela não foi excluída."
+              );
+            }
+
+            const { error: storageError } =
+              await supabaseClient.storage
+                .from("fotos")
+                .remove([photo.storagePath]);
+
+            if (storageError) throw storageError;
+
+            const { error: deleteError } =
+              await supabaseClient
+                .from("fotos")
+                .delete()
+                .eq("id", id);
+
+            if (deleteError) {
+              throw new Error(
+                "O arquivo foi removido, mas o registro não pôde ser apagado: " +
+                deleteError.message
+              );
+            }
+
+            await loadPhotos();
+
+          } else if (cloudTables[type]) {
             const { error } = await supabaseClient
               .from(cloudTables[type])
               .delete()
@@ -584,9 +695,10 @@ async function renderItems(type) {
             if (error) throw error;
 
             await loadCloudItems(type);
+
           } else {
             data[type] = data[type].filter(
-              item => item.id !== id
+              item => String(item.id) !== String(id)
             );
 
             saveData();
@@ -599,7 +711,7 @@ async function renderItems(type) {
           console.error("Erro ao excluir:", error);
 
           alert(
-            "Não foi possível excluir a publicação.\n\n" +
+            "Não foi possível concluir a exclusão.\n\n" +
             error.message
           );
 
@@ -615,7 +727,7 @@ async function renderItems(type) {
       list.innerHTML = `
         <div class="empty">
           Não foi possível carregar os dados.
-          Atualize a página e tente novamente.
+          Verifique sua conexão e as permissões do Supabase.
         </div>
       `;
     }
@@ -623,7 +735,7 @@ async function renderItems(type) {
 }
 
 // ==========================================
-// EVENTOS DO MENU E DO PAINEL
+// MENU E PAINEL
 // ==========================================
 
 document.querySelectorAll(".nav-item").forEach(button => {
@@ -685,17 +797,6 @@ themeToggle.addEventListener("click", () => {
 // ==========================================
 // AUTENTICAÇÃO SUPABASE
 // ==========================================
-
-const SUPABASE_URL =
-  "https://ggxhghszthcgnkecoiir.supabase.co";
-
-const SUPABASE_PUBLISHABLE_KEY =
-  "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
-
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_PUBLISHABLE_KEY
-);
 
 const authScreen = document.getElementById("auth-screen");
 const authForm = document.getElementById("auth-form");
@@ -830,18 +931,14 @@ authForm.addEventListener("submit", async event => {
       showAuthMessage(
         "Este e-mail já possui cadastro. Tente entrar."
       );
-
     } else if (/invalid login credentials/i.test(message)) {
       showAuthMessage("E-mail ou senha incorretos.");
-
     } else if (/email not confirmed/i.test(message)) {
       showAuthMessage("Confirme seu e-mail antes de entrar.");
-
     } else if (/password should be at least/i.test(message)) {
       showAuthMessage(
         "A senha precisa ter pelo menos 6 caracteres."
       );
-
     } else {
       showAuthMessage(
         "Não foi possível concluir. " + message
@@ -882,29 +979,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
   setAuthenticated(Boolean(session));
 
   if (event === "SIGNED_IN") {
-    // Carrega as publicações da nuvem depois do login.
     setTimeout(() => {
-      
-async function loadPhotos() {
-  const { data: rows, error } = await supabaseClient
-    .from("fotos")
-    .select("id, nome, imagem_url, storage_path, created_at")
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-
-  data.fotos = (rows || []).map(row => ({
-    id: row.id,
-    title: row.nome,
-    description: "",
-    image: row.imagem_url,
-    storagePath: row.storage_path,
-    createdAt: row.created_at
-  }));
-
-  updateStats();
-}
-
       refreshCloudData();
     }, 0);
   }
@@ -912,10 +987,18 @@ async function loadPhotos() {
   if (event === "SIGNED_OUT") {
     authForm.reset();
     showAuthMessage("Você saiu da sua conta.");
+    data.fotos = [];
+    data.eventos = [];
+    data.promocoes = [];
+    data.avisos = [];
+    updateStats();
   }
 });
 
-// Recupera a sessão salva ao abrir ou atualizar a página.
+// ==========================================
+// RECUPERAR SESSÃO
+// ==========================================
+
 async function restoreAuthSession() {
   setAuthenticated(false);
 
