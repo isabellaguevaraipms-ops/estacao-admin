@@ -51,6 +51,7 @@ const state = {
   promocoes: [],
   avisos: [],
   fotos: [],
+  avaliacoes: [],
   busy: false,
   authMode: "login"
 };
