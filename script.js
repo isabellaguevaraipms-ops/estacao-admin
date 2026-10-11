@@ -308,3 +308,187 @@ themeToggle.addEventListener("click", () => {
   const isDark = !document.body.classList.contains("dark-theme");
   applyTheme(isDark);
 });
+
+// ==========================================
+// AUTENTICAÇÃO SUPABASE
+// ==========================================
+
+const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);
+
+const authScreen = document.getElementById("auth-screen");
+const authForm = document.getElementById("auth-form");
+const authTitle = document.getElementById("auth-title");
+const authDescription = document.getElementById("auth-description");
+const authSubmit = document.getElementById("auth-submit");
+const authSwitch = document.getElementById("auth-switch");
+const authMessage = document.getElementById("auth-message");
+const authEmail = document.getElementById("auth-email");
+const authPassword = document.getElementById("auth-password");
+
+let isSignUpMode = false;
+let authBusy = false;
+
+// Adiciona o botão de sair ao cabeçalho existente.
+const topbar = document.querySelector(".topbar");
+
+const logoutButton = document.createElement("button");
+logoutButton.type = "button";
+logoutButton.id = "auth-logout";
+logoutButton.className = "preview-link";
+logoutButton.textContent = "Sair da conta";
+logoutButton.style.border = "0";
+logoutButton.style.cursor = "pointer";
+logoutButton.style.display = "none";
+
+topbar.appendChild(logoutButton);
+
+function showAuthMessage(message, success = false) {
+  authMessage.textContent = message;
+  authMessage.style.color = success ? "#21865c" : "#b33b3b";
+}
+
+function updateAuthMode() {
+  authTitle.textContent = isSignUpMode
+    ? "Crie sua conta"
+    : "Bem-vindo de volta!";
+
+  authDescription.textContent = isSignUpMode
+    ? "Cadastre seu e-mail para acessar o painel."
+    : "Entre para administrar seu estabelecimento.";
+
+  authSubmit.textContent = isSignUpMode
+    ? "Criar conta"
+    : "Entrar";
+
+  authSwitch.textContent = isSignUpMode
+    ? "Já tem uma conta? Entre aqui"
+    : "Ainda não tem conta? Cadastre-se";
+
+  authPassword.autocomplete = isSignUpMode
+    ? "new-password"
+    : "current-password";
+
+  authPassword.minLength = 6;
+  showAuthMessage("");
+}
+
+function setAuthenticated(isAuthenticated) {
+  document.body.classList.toggle("authenticated", isAuthenticated);
+  authScreen.hidden = isAuthenticated;
+  logoutButton.style.display = isAuthenticated ? "inline-block" : "none";
+}
+
+authSwitch.addEventListener("click", () => {
+  isSignUpMode = !isSignUpMode;
+  updateAuthMode();
+});
+
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (authBusy) return;
+
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+
+  authBusy = true;
+  authSubmit.disabled = true;
+  authSubmit.textContent = "Aguarde...";
+  showAuthMessage("");
+
+  try {
+    if (isSignUpMode) {
+      const { data: result, error } =
+        await supabaseClient.auth.signUp({
+          email,
+          password
+        });
+
+      if (error) throw error;
+
+      if (result.session) {
+        showAuthMessage("Conta criada com sucesso!", true);
+      } else {
+        showAuthMessage(
+          "Cadastro recebido! Confira seu e-mail para confirmar a conta antes de entrar.",
+          true
+        );
+      }
+    } else {
+      const { error } =
+        await supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+
+      if (error) throw error;
+
+      showAuthMessage("Login realizado!", true);
+    }
+  } catch (error) {
+    const message = String(error.message || "");
+
+    if (/already registered|already exists|user already/i.test(message)) {
+      showAuthMessage("Este e-mail já possui cadastro. Tente entrar.");
+    } else if (/invalid login credentials/i.test(message)) {
+      showAuthMessage("E-mail ou senha incorretos.");
+    } else if (/email not confirmed/i.test(message)) {
+      showAuthMessage("Confirme seu e-mail antes de entrar.");
+    } else if (/password should be at least/i.test(message)) {
+      showAuthMessage("A senha precisa ter pelo menos 6 caracteres.");
+    } else {
+      showAuthMessage("Não foi possível concluir. " + message);
+    }
+  } finally {
+    authBusy = false;
+    authSubmit.disabled = false;
+    authSubmit.textContent = isSignUpMode ? "Criar conta" : "Entrar";
+  }
+});
+
+logoutButton.addEventListener("click", async () => {
+  logoutButton.disabled = true;
+
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
+  } catch (error) {
+    alert("Não foi possível sair da conta: " + error.message);
+  } finally {
+    logoutButton.disabled = false;
+  }
+});
+
+// Restaura a sessão salva pelo Supabase ao abrir o site.
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  setAuthenticated(Boolean(session));
+
+  if (event === "SIGNED_OUT") {
+    authForm.reset();
+    showAuthMessage("Você saiu da sua conta.");
+  }
+});
+
+async function restoreAuthSession() {
+  setAuthenticated(false);
+
+  const { data: sessionData, error } =
+    await supabaseClient.auth.getSession();
+
+  if (error) {
+    showAuthMessage("Não foi possível verificar sua sessão. Atualize a página.");
+    return;
+  }
+
+  setAuthenticated(Boolean(sessionData.session));
+}
+
+updateAuthMode();
+restoreAuthSession();
