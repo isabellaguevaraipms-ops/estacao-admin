@@ -848,12 +848,14 @@ function renderPage(page) {
   document.getElementById("section-title").textContent =
     page === "inicio" ? t("establishment") : t(page);
 
-  document.querySelectorAll(".nav-item").forEach(button => {
-    button.classList.toggle("active", button.dataset.page === page);
+ 
+document.querySelectorAll(".nav-item").forEach(button => {
+  button.classList.toggle(
+    "active",
+    button.dataset.page === page
+  );
+});
 
-    const label = button.querySelector("span");
-    if (label && translations[getSelectedLanguage()][page]) {
-      label.textContent = t(page);
     }
   });
 
