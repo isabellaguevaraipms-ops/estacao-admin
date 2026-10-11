@@ -1,14 +1,12 @@
-// Estação Alegria — Painel administrativo
-// Preencha com os dados PUBLICÁVEIS do seu projeto Supabase.
-// Nunca coloque a chave secret ou service_role aqui.
 
-const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.com";
-const SUPABASE_ANON_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
+/* =========================================================
+   ESTAÇÃO ALEGRIA — PAINEL ADMINISTRATIVO
+   ========================================================= */
 
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+// Use somente a URL e a chave PUBLICÁVEL do Supabase.
+const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxqGQ";
 
 const MEDIA_BUCKET = "foto";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -39,6 +37,10 @@ const SECTION_TITLES = {
   avaliacoes: "Moderar avaliações dos visitantes"
 };
 
+// IMPORTANTE: declarar supabaseClient somente uma vez.
+let supabaseClient = null;
+let authSubscription = null;
+
 const state = {
   page: "inicio",
   eventos: [],
@@ -49,9 +51,6 @@ const state = {
   busy: false,
   authMode: "login"
 };
-
-let supabaseClient = null;
-let authSubscription = null;
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -124,6 +123,7 @@ function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) {
     return `${Math.round(bytes / 1024)} KB`;
   }
+
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -162,18 +162,18 @@ function getCurrentList(type) {
 }
 
 /* =========================================================
-   1. SUPABASE
+   1. INICIALIZAÇÃO DO SUPABASE
    ========================================================= */
 
 function initializeSupabase() {
   if (!window.supabase || !window.supabase.createClient) {
     throw new Error(
-      "A biblioteca do Supabase não carregou. Atualize a página e tente novamente."
+      "A biblioteca do Supabase não carregou. Atualize a página."
     );
   }
 
-  if (!SUPABASE_PUBLISHABLE_KEY) {
-    throw new Error("Configure a Publishable key do Supabase.");
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Configure a URL e a chave pública do Supabase.");
   }
 
   supabaseClient = window.supabase.createClient(
@@ -212,6 +212,7 @@ function updateAuthMode() {
 
 async function handleAuthSubmit(event) {
   event.preventDefault();
+
   if (!supabaseClient || state.busy) return;
 
   const email = $("#auth-email").value.trim();
@@ -229,7 +230,11 @@ async function handleAuthSubmit(event) {
     let result;
 
     if (state.authMode === "signup") {
-      result = await supabaseClient.auth.signUp({ email, password });
+      result = await supabaseClient.auth.signUp({
+        email,
+        password
+      });
+
       if (result.error) throw result.error;
 
       if (result.data.session) {
@@ -247,9 +252,13 @@ async function handleAuthSubmit(event) {
       });
 
       if (result.error) throw result.error;
+
+      showAuthMessage("Login realizado com sucesso.", false);
     }
   } catch (error) {
-    showAuthMessage(error.message || "Não foi possível entrar.");
+    showAuthMessage(
+      error.message || "Não foi possível entrar. Confira seus dados."
+    );
   } finally {
     setBusy(false);
   }
@@ -257,6 +266,7 @@ async function handleAuthSubmit(event) {
 
 async function handleLogout() {
   if (!supabaseClient) return;
+
   if (!window.confirm("Deseja sair do painel?")) return;
 
   const { error } = await supabaseClient.auth.signOut();
@@ -267,7 +277,7 @@ async function handleLogout() {
 }
 
 /* =========================================================
-   3. SESSÃO
+   3. SESSÃO E VISIBILIDADE DO PAINEL
    ========================================================= */
 
 function clearData() {
@@ -282,7 +292,10 @@ function setAuthenticated(authenticated) {
   document.body.classList.toggle("authenticated", authenticated);
 
   const authScreen = $("#auth-screen");
-  if (authScreen) authScreen.hidden = authenticated;
+
+  if (authScreen) {
+    authScreen.hidden = authenticated;
+  }
 
   if (!authenticated) {
     clearData();
@@ -294,15 +307,19 @@ function setAuthenticated(authenticated) {
 async function restoreAuthSession() {
   try {
     const { data, error } = await supabaseClient.auth.getSession();
+
     if (error) throw error;
 
-    setAuthenticated(Boolean(data.session));
+    const authenticated = Boolean(data.session);
 
-    if (data.session) {
+    setAuthenticated(authenticated);
+
+    if (authenticated) {
       await refreshAllData();
     }
   } catch (error) {
     setAuthenticated(false);
+
     showAuthMessage(
       error.message || "Não foi possível verificar sua sessão."
     );
@@ -311,11 +328,15 @@ async function restoreAuthSession() {
 
 function listenForAuthChanges() {
   const { data } = supabaseClient.auth.onAuthStateChange(
-    async (event, session) => {
+    (event, session) => {
       setAuthenticated(Boolean(session));
 
+      // Evita executar consultas Supabase diretamente dentro
+      // do callback de autenticação.
       if (event === "SIGNED_IN" && session) {
-        await refreshAllData();
+        setTimeout(() => {
+          refreshAllData();
+        }, 0);
       }
 
       if (event === "SIGNED_OUT") {
@@ -330,7 +351,7 @@ function listenForAuthChanges() {
 }
 
 /* =========================================================
-   4. CARREGAMENTO DE DADOS
+   4. CARREGAMENTO DOS DADOS
    ========================================================= */
 
 async function loadContent(type) {
@@ -480,21 +501,30 @@ function renderHome() {
 }
 
 /* =========================================================
-   7. AVALIAÇÕES — MODERAÇÃO
+   7. MODERAÇÃO DE AVALIAÇÕES
    ========================================================= */
 
 function renderReviewsPage() {
   const reviews = state.avaliacoes;
 
-  const pending = reviews.filter((item) => item.status === "pendente").length;
-  const approved = reviews.filter((item) => item.status === "aprovada").length;
-  const rejected = reviews.filter((item) => item.status === "rejeitada").length;
+  const pending = reviews.filter(
+    (item) => item.status === "pendente"
+  ).length;
+
+  const approved = reviews.filter(
+    (item) => item.status === "aprovada"
+  ).length;
+
+  const rejected = reviews.filter(
+    (item) => item.status === "rejeitada"
+  ).length;
 
   const cards = reviews.map((review) => {
     const rating = Math.max(1, Math.min(5, Number(review.nota) || 1));
-    const status = ["pendente", "aprovada", "rejeitada"].includes(review.status)
-      ? review.status
-      : "pendente";
+
+    const status = ["pendente", "aprovada", "rejeitada"].includes(
+      review.status
+    ) ? review.status : "pendente";
 
     const statusLabels = {
       pendente: "Pendente",
@@ -526,33 +556,27 @@ function renderReviewsPage() {
         </p>
 
         <div class="item-actions">
-          <button
-            class="primary-btn"
-            type="button"
+          <button class="primary-btn" type="button"
             data-review-action="aprovada"
             data-id="${escapeHTML(review.id)}"
-            ${status === "aprovada" ? "disabled" : ""}
-          >
+            ${status === "aprovada" ? "disabled" : ""}>
             Aprovar
           </button>
 
-          <button
-            class="delete-btn"
-            type="button"
+          <button class="delete-btn" type="button"
             data-review-action="rejeitada"
             data-id="${escapeHTML(review.id)}"
-            ${status === "rejeitada" ? "disabled" : ""}
-          >
+            ${status === "rejeitada" ? "disabled" : ""}>
             Rejeitar
           </button>
 
           ${
             status !== "pendente"
-              ? `<button
-                  type="button"
+              ? `<button type="button"
                   data-review-action="pendente"
-                  data-id="${escapeHTML(review.id)}"
-                >Voltar para pendente</button>`
+                  data-id="${escapeHTML(review.id)}">
+                  Voltar para pendente
+                </button>`
               : ""
           }
         </div>
@@ -581,10 +605,7 @@ function renderReviewsPage() {
     </div>
 
     <div class="item-list">
-      ${
-        cards ||
-        '<div class="empty">Nenhuma avaliação encontrada.</div>'
-      }
+      ${cards || '<div class="empty">Nenhuma avaliação encontrada.</div>'}
     </div>
   `;
 }
@@ -609,15 +630,11 @@ async function moderateReview(id, status) {
     return;
   }
 
-  if (
-    !window.confirm(
-      `Deseja ${actions[status]} a avaliação de ${
-        review.nome_publico || "um visitante"
-      }?`
-    )
-  ) {
-    return;
-  }
+  if (!window.confirm(
+    `Deseja ${actions[status]} a avaliação de ${
+      review.nome_publico || "um visitante"
+    }?`
+  )) return;
 
   setBusy(true);
 
@@ -631,13 +648,9 @@ async function moderateReview(id, status) {
 
     await loadReviews();
     renderPage("avaliacoes");
-
     showMessage("Status da avaliação atualizado com sucesso.");
   } catch (error) {
-    showMessage(
-      `Erro ao moderar avaliação: ${error.message}`,
-      true
-    );
+    showMessage(`Erro ao moderar avaliação: ${error.message}`, true);
   } finally {
     setBusy(false);
   }
@@ -722,7 +735,7 @@ async function uploadPhoto(event) {
   }
 
   if (!isImageFile(file) && !isVideoFile(file)) {
-    showMessage("Escolha um arquivo de imagem ou vídeo compatível.", true);
+    showMessage("Escolha uma imagem ou vídeo compatível.", true);
     return;
   }
 
@@ -777,7 +790,10 @@ async function uploadPhoto(event) {
       }]);
 
     if (insertError) {
-      await supabaseClient.storage.from(MEDIA_BUCKET).remove([storagePath]);
+      await supabaseClient.storage
+        .from(MEDIA_BUCKET)
+        .remove([storagePath]);
+
       throw insertError;
     }
 
@@ -797,6 +813,7 @@ function previewSelectedFile() {
   const preview = $("#file-preview");
 
   if (!preview) return;
+
   preview.innerHTML = "";
   if (!file) return;
 
@@ -806,12 +823,14 @@ function previewSelectedFile() {
   }
 
   if (!isImageFile(file) && !isVideoFile(file)) {
-    preview.textContent = "Selecione uma imagem ou um vídeo compatível.";
+    preview.textContent = "Selecione uma imagem ou vídeo compatível.";
     return;
   }
 
   const url = URL.createObjectURL(file);
-  const element = document.createElement(isVideoFile(file) ? "video" : "img");
+  const element = document.createElement(
+    isVideoFile(file) ? "video" : "img"
+  );
 
   element.src = url;
   element.style.maxWidth = "100%";
@@ -889,7 +908,9 @@ function renderContentPage(type) {
     <article class="item-card">
       <h3>${escapeHTML(item.titulo)}</h3>
       <p>${escapeHTML(item.descricao)}</p>
-      ${item.data ? `<p><strong>${escapeHTML(dateLabel)}:</strong> ${escapeHTML(formatDate(item.data))}</p>` : ""}
+      ${item.data
+        ? `<p><strong>${escapeHTML(dateLabel)}:</strong> ${escapeHTML(formatDate(item.data))}</p>`
+        : ""}
       <div class="item-actions">
         <button class="delete-btn" type="button"
           data-delete-content="${escapeHTML(type)}"
@@ -910,7 +931,8 @@ function renderContentPage(type) {
         <div class="field">
           <label for="content-title">Título</label>
           <input id="content-title" name="titulo" maxlength="150"
-            required placeholder="${isEvent ? "Ex.: Música ao vivo" : isPromotion ? "Ex.: Promoção de fim de semana" : "Ex.: Horário de funcionamento"}">
+            required
+            placeholder="${isEvent ? "Ex.: Música ao vivo" : isPromotion ? "Ex.: Promoção de fim de semana" : "Ex.: Horário de funcionamento"}">
         </div>
 
         <div class="field">
@@ -923,7 +945,8 @@ function renderContentPage(type) {
         ${isEvent || isPromotion ? `
           <div class="field">
             <label for="content-date">${escapeHTML(dateLabel)}</label>
-            <input id="content-date" name="${dateField}" type="date" required>
+            <input id="content-date" name="${dateField}"
+              type="date" required>
           </div>
         ` : ""}
 
@@ -972,6 +995,7 @@ async function saveContent(event) {
       showMessage("Preencha a data solicitada.", true);
       return;
     }
+
     row[dateField] = dateValue;
   }
 
@@ -1029,31 +1053,37 @@ async function deleteContent(type, id) {
 
 function attachPageEvents() {
   const contentForm = $("#content-form");
+
   if (contentForm) {
     contentForm.addEventListener("submit", saveContent);
   }
 
   const photoForm = $("#photo-form");
+
   if (photoForm) {
     photoForm.addEventListener("submit", uploadPhoto);
   }
 
   const fileInput = $("#photo-file");
+
   if (fileInput) {
     fileInput.addEventListener("change", previewSelectedFile);
   }
 
   const refreshButton = $("#refresh-content");
+
   if (refreshButton) {
     refreshButton.addEventListener("click", refreshAllData);
   }
 
   const refreshReviewsButton = $("#refresh-reviews");
+
   if (refreshReviewsButton) {
     refreshReviewsButton.addEventListener("click", async () => {
       if (state.busy) return;
 
       setBusy(true);
+
       try {
         await loadReviews();
         renderPage("avaliacoes");
@@ -1103,11 +1133,17 @@ function setupNavigation() {
 }
 
 /* =========================================================
-   11. TEMA
+   11. TEMA CLARO E ESCURO
    ========================================================= */
 
 function setupTheme() {
-  const savedTheme = localStorage.getItem("estacaoAlegriaTheme");
+  let savedTheme = null;
+
+  try {
+    savedTheme = localStorage.getItem("estacaoAlegriaTheme");
+  } catch (error) {
+    // O painel continua funcionando se o armazenamento estiver bloqueado.
+  }
 
   if (savedTheme === "dark") {
     document.body.classList.add("dark-theme");
@@ -1121,10 +1157,14 @@ function setupTheme() {
   toggle.addEventListener("click", () => {
     document.body.classList.toggle("dark-theme");
 
-    localStorage.setItem(
-      "estacaoAlegriaTheme",
-      document.body.classList.contains("dark-theme") ? "dark" : "light"
-    );
+    try {
+      localStorage.setItem(
+        "estacaoAlegriaTheme",
+        document.body.classList.contains("dark-theme") ? "dark" : "light"
+      );
+    } catch (error) {
+      // A mudança visual continua funcionando sem armazenamento.
+    }
 
     updateThemeIcon();
   });
@@ -1172,7 +1212,7 @@ function setupPreviewLink() {
 }
 
 /* =========================================================
-   13. INICIALIZAÇÃO
+   13. INICIALIZAÇÃO DO PAINEL
    ========================================================= */
 
 async function initializeApp() {
@@ -1180,14 +1220,24 @@ async function initializeApp() {
   setupTheme();
   setupPreviewLink();
 
-  $("#auth-form").addEventListener("submit", handleAuthSubmit);
+  const authForm = $("#auth-form");
+  const authSwitch = $("#auth-switch");
+  const logoutButton = $("#logout-btn");
 
-  $("#auth-switch").addEventListener("click", () => {
-    state.authMode = state.authMode === "login" ? "signup" : "login";
-    updateAuthMode();
-  });
+  if (authForm) {
+    authForm.addEventListener("submit", handleAuthSubmit);
+  }
 
-  $("#logout-btn").addEventListener("click", handleLogout);
+  if (authSwitch) {
+    authSwitch.addEventListener("click", () => {
+      state.authMode = state.authMode === "login" ? "signup" : "login";
+      updateAuthMode();
+    });
+  }
+
+  if (logoutButton) {
+    logoutButton.addEventListener("click", handleLogout);
+  }
 
   renderStats();
   renderPage("inicio");
