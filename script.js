@@ -22,7 +22,8 @@ const TABLES = {
   eventos: "eventos",
   promocoes: "promocoes",
   avisos: "avisos",
-  fotos: "fotos"
+  fotos: "fotos",
+  avaliacoes: "avaliacoes"
 };
 
 const TITLES = {
