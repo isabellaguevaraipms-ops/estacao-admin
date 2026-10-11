@@ -840,6 +840,7 @@ function setupSettings() {
 // NAVEGAÇÃO
 // ==========================================
 
+
 function renderPage(page) {
   if (!titles[page]) return;
 
@@ -848,15 +849,11 @@ function renderPage(page) {
   document.getElementById("section-title").textContent =
     page === "inicio" ? t("establishment") : t(page);
 
- 
-document.querySelectorAll(".nav-item").forEach(button => {
-  button.classList.toggle(
-    "active",
-    button.dataset.page === page
-  );
-});
-
-    }
+  document.querySelectorAll(".nav-item").forEach(button => {
+    button.classList.toggle(
+      "active",
+      button.dataset.page === page
+    );
   });
 
   if (page === "inicio") {
@@ -865,13 +862,17 @@ document.querySelectorAll(".nav-item").forEach(button => {
         <div class="form-card">
           <h3>${t("startHere")}</h3>
           <p>${t("startDescription")}</p>
-          <button class="primary-btn" data-go="fotos">${t("addMedia")}</button>
+          <button class="primary-btn" data-go="fotos">
+            ${t("addMedia")}
+          </button>
         </div>
 
         <div class="form-card">
           <h3>${t("cloudTitle")}</h3>
           <p>${t("cloudDescription")}</p>
-          <button class="primary-btn" data-go="eventos">${t("addEvent")}</button>
+          <button class="primary-btn" data-go="eventos">
+            ${t("addEvent")}
+          </button>
         </div>
       </div>`;
     return;
