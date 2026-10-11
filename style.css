@@ -880,3 +880,13 @@ body.dark-theme .auth-card input {
     font-size: 23px;
   }
 }
+
+
+.auth-screen[hidden] {
+  display: none !important;
+}
+
+body.authenticated .sidebar,
+body.authenticated .main {
+  display: block;
+}
