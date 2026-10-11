@@ -87,6 +87,11 @@ const supabaseClient = window.supabase.createClient(
   SUPABASE_PUBLISHABLE_KEY
 );
 
+// Nome do bucket de imagens: foto
+// Nome da tabela de registros: fotos
+
+const PHOTO_BUCKET = "foto";
+
 // ==========================================
 // CARREGAR DADOS DO BANCO
 // ==========================================
@@ -449,7 +454,11 @@ async function handleSubmit(event) {
     if (type === "fotos") {
       const file = formData.get("image");
 
-      if (!file || !file.type.startsWith("image/")) {
+      if (
+        !file ||
+        typeof file.type !== "string" ||
+        !file.type.startsWith("image/")
+      ) {
         throw new Error("Selecione uma imagem válida.");
       }
 
@@ -470,7 +479,10 @@ async function handleSubmit(event) {
         );
       }
 
-      const extensionMatch = file.name.match(/\.([a-zA-Z0-9]+)$/);
+      const extensionMatch = file.name.match(
+        /\.([a-zA-Z0-9]+)$/
+      );
+
       const extension = extensionMatch
         ? extensionMatch[1].toLowerCase()
         : "jpg";
@@ -478,9 +490,10 @@ async function handleSubmit(event) {
       const storagePath =
         `${crypto.randomUUID()}.${extension}`;
 
+      // IMPORTANTE: bucket no singular: foto
       const { error: uploadError } =
         await supabaseClient.storage
-          .from("fotos")
+          .from(PHOTO_BUCKET)
           .upload(storagePath, file, {
             contentType: file.type,
             upsert: false
@@ -488,11 +501,19 @@ async function handleSubmit(event) {
 
       if (uploadError) throw uploadError;
 
+      // Gera o endereço público do arquivo enviado.
       const { data: publicData } =
         supabaseClient.storage
-          .from("fotos")
+          .from(PHOTO_BUCKET)
           .getPublicUrl(storagePath);
 
+      if (!publicData?.publicUrl) {
+        throw new Error(
+          "Não foi possível gerar o endereço da imagem."
+        );
+      }
+
+      // IMPORTANTE: a tabela continua no plural: fotos
       const { error: insertError } =
         await supabaseClient
           .from("fotos")
@@ -503,10 +524,10 @@ async function handleSubmit(event) {
           });
 
       if (insertError) {
-        // Tenta remover o arquivo se o registro falhar.
+        // Tenta remover o arquivo caso o registro falhe.
         const { error: cleanupError } =
           await supabaseClient.storage
-            .from("fotos")
+            .from(PHOTO_BUCKET)
             .remove([storagePath]);
 
         if (cleanupError) {
@@ -562,8 +583,9 @@ async function handleSubmit(event) {
 
     alert(
       "Não foi possível salvar a publicação.\n\n" +
-      error.message
+      (error.message || "Erro desconhecido.")
     );
+
   } finally {
     if (submitButton.isConnected) {
       submitButton.disabled = false;
@@ -642,7 +664,11 @@ async function renderItems(type) {
       button.addEventListener("click", async () => {
         const id = button.dataset.delete;
 
-        if (!confirm("Deseja realmente excluir esta publicação?")) {
+        if (
+          !confirm(
+            "Deseja realmente excluir esta publicação?"
+          )
+        ) {
           return;
         }
 
@@ -664,13 +690,15 @@ async function renderItems(type) {
               );
             }
 
+            // Remove a imagem do bucket foto.
             const { error: storageError } =
               await supabaseClient.storage
-                .from("fotos")
+                .from(PHOTO_BUCKET)
                 .remove([photo.storagePath]);
 
             if (storageError) throw storageError;
 
+            // Remove o registro da tabela fotos.
             const { error: deleteError } =
               await supabaseClient
                 .from("fotos")
@@ -712,7 +740,7 @@ async function renderItems(type) {
 
           alert(
             "Não foi possível concluir a exclusão.\n\n" +
-            error.message
+            (error.message || "Erro desconhecido.")
           );
 
           button.disabled = false;
@@ -927,7 +955,9 @@ authForm.addEventListener("submit", async event => {
   } catch (error) {
     const message = String(error.message || "");
 
-    if (/already registered|already exists|user already/i.test(message)) {
+    if (
+      /already registered|already exists|user already/i.test(message)
+    ) {
       showAuthMessage(
         "Este e-mail já possui cadastro. Tente entrar."
       );
@@ -987,10 +1017,12 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_OUT") {
     authForm.reset();
     showAuthMessage("Você saiu da sua conta.");
+
     data.fotos = [];
     data.eventos = [];
     data.promocoes = [];
     data.avisos = [];
+
     updateStats();
   }
 });
