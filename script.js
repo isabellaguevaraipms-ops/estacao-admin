@@ -3,17 +3,11 @@
 
 /* =========================================================
    ESTAÇÃO ALEGRIA — PAINEL ADMINISTRATIVO
-   Mantidos: login, fotos/vídeos, eventos, promoções e avisos.
-   Removidos: configurações, troca de senha, minha conta
-   e exclusão de conta.
+   Login, fotos/vídeos, eventos, promoções, avisos e avaliações.
    ========================================================= */
 
-/* 1. SUPABASE
-   Cole abaixo a Publishable key atual do seu projeto.
-   Não use uma chave secret ou service_role.
-*/
 const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxqGQ";
 
 const MEDIA_BUCKET = "foto";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -43,7 +37,6 @@ const SECTION_TITLES = {
   avisos: "Gerenciar avisos",
   avaliacoes: "Moderar avaliações dos visitantes"
 };
-};
 
 const state = {
   page: "inicio",
@@ -58,8 +51,6 @@ const state = {
 
 let supabaseClient = null;
 let authSubscription = null;
-
-/* 2. ELEMENTOS E UTILITÁRIOS */
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -108,6 +99,18 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("pt-BR").format(date);
 }
 
+function formatReviewDate(value) {
+  if (!value) return "Data não informada";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Data não informada";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
+}
+
 function isVideoFile(file) {
   return Boolean(file && file.type.startsWith("video/"));
 }
@@ -124,8 +127,7 @@ function formatFileSize(bytes) {
 }
 
 function getFileExtension(file) {
-  const name = file.name || "";
-  const match = name.match(/\.([a-zA-Z0-9]+)$/);
+  const match = (file.name || "").match(/\.([a-zA-Z0-9]+)$/);
   return match ? match[1].toLowerCase() : "";
 }
 
@@ -158,7 +160,9 @@ function getCurrentList(type) {
   return state[type] || [];
 }
 
-/* 3. INICIALIZAÇÃO DO SUPABASE */
+/* =========================================================
+   1. SUPABASE
+   ========================================================= */
 
 function initializeSupabase() {
   if (!window.supabase || !window.supabase.createClient) {
@@ -167,13 +171,8 @@ function initializeSupabase() {
     );
   }
 
-  if (
-    !SUPABASE_PUBLISHABLE_KEY ||
-    SUPABASE_PUBLISHABLE_KEY === "COLE_AQUI_SUA_PUBLISHABLE_KEY"
-  ) {
-    throw new Error(
-      "Falta configurar a Publishable key do Supabase no script.js."
-    );
+  if (!SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Configure a Publishable key do Supabase.");
   }
 
   supabaseClient = window.supabase.createClient(
@@ -182,7 +181,9 @@ function initializeSupabase() {
   );
 }
 
-/* 4. LOGIN E CADASTRO */
+/* =========================================================
+   2. LOGIN E CADASTRO
+   ========================================================= */
 
 function updateAuthMode() {
   const isSignup = state.authMode === "signup";
@@ -227,11 +228,7 @@ async function handleAuthSubmit(event) {
     let result;
 
     if (state.authMode === "signup") {
-      result = await supabaseClient.auth.signUp({
-        email,
-        password
-      });
-
+      result = await supabaseClient.auth.signUp({ email, password });
       if (result.error) throw result.error;
 
       if (result.data.session) {
@@ -259,9 +256,7 @@ async function handleAuthSubmit(event) {
 
 async function handleLogout() {
   if (!supabaseClient) return;
-
-  const confirmed = window.confirm("Deseja sair do painel?");
-  if (!confirmed) return;
+  if (!window.confirm("Deseja sair do painel?")) return;
 
   const { error } = await supabaseClient.auth.signOut();
 
@@ -270,24 +265,29 @@ async function handleLogout() {
   }
 }
 
-/* 5. CONTROLE DA SESSÃO */
-
-function setAuthenticated(authenticated) {
-  document.body.classList.toggle("authenticated", authenticated);
-  $("#auth-screen").hidden = authenticated;
-
-  if (!authenticated) {
-    clearData();
-    renderStats();
-    renderPage("inicio");
-  }
-}
+/* =========================================================
+   3. SESSÃO
+   ========================================================= */
 
 function clearData() {
   state.eventos = [];
   state.promocoes = [];
   state.avisos = [];
   state.fotos = [];
+  state.avaliacoes = [];
+}
+
+function setAuthenticated(authenticated) {
+  document.body.classList.toggle("authenticated", authenticated);
+
+  const authScreen = $("#auth-screen");
+  if (authScreen) authScreen.hidden = authenticated;
+
+  if (!authenticated) {
+    clearData();
+    renderStats();
+    renderPage("inicio");
+  }
 }
 
 async function restoreAuthSession() {
@@ -328,7 +328,9 @@ function listenForAuthChanges() {
   authSubscription = data.subscription;
 }
 
-/* 6. CARREGAMENTO DE EVENTOS, PROMOÇÕES E AVISOS */
+/* =========================================================
+   4. CARREGAMENTO DE DADOS
+   ========================================================= */
 
 async function loadContent(type) {
   const { data, error } = await supabaseClient
@@ -357,6 +359,7 @@ async function loadPhotos() {
     created_at: row.created_at || ""
   }));
 }
+
 async function loadReviews() {
   const { data, error } = await supabaseClient
     .from(TABLES.avaliacoes)
@@ -367,6 +370,7 @@ async function loadReviews() {
 
   state.avaliacoes = data || [];
 }
+
 async function refreshAllData() {
   if (!supabaseClient) return;
 
@@ -375,7 +379,7 @@ async function refreshAllData() {
       loadContent("eventos"),
       loadContent("promocoes"),
       loadContent("avisos"),
-      loadPhotos()
+      loadPhotos(),
       loadReviews()
     ]);
 
@@ -390,16 +394,27 @@ async function refreshAllData() {
   }
 }
 
-/* 7. CONTADORES */
+/* =========================================================
+   5. CONTADORES
+   ========================================================= */
 
 function renderStats() {
-  $("#total-fotos").textContent = state.fotos.length;
-  $("#total-eventos").textContent = state.eventos.length;
-  $("#total-promocoes").textContent = state.promocoes.length;
-  $("#total-avisos").textContent = state.avisos.length;
+  const counters = {
+    "#total-fotos": state.fotos.length,
+    "#total-eventos": state.eventos.length,
+    "#total-promocoes": state.promocoes.length,
+    "#total-avisos": state.avisos.length
+  };
+
+  Object.entries(counters).forEach(([selector, value]) => {
+    const element = $(selector);
+    if (element) element.textContent = value;
+  });
 }
 
-/* 8. NAVEGAÇÃO */
+/* =========================================================
+   6. NAVEGAÇÃO E PÁGINAS
+   ========================================================= */
 
 function navigateTo(page) {
   if (!TITLES[page]) return;
@@ -418,6 +433,7 @@ function renderPage(page) {
   if (!container) return;
 
   state.page = page;
+
   $("#page-title").textContent = TITLES[page] || TITLES.inicio;
   $("#section-title").textContent =
     SECTION_TITLES[page] || SECTION_TITLES.inicio;
@@ -426,8 +442,12 @@ function renderPage(page) {
     container.innerHTML = renderHome();
   } else if (page === "fotos") {
     container.innerHTML = renderPhotosPage();
-  } else {
+  } else if (page === "avaliacoes") {
+    container.innerHTML = renderReviewsPage();
+  } else if (["eventos", "promocoes", "avisos"].includes(page)) {
     container.innerHTML = renderContentPage(page);
+  } else {
+    container.innerHTML = renderHome();
   }
 
   attachPageEvents();
@@ -439,21 +459,192 @@ function renderHome() {
       <article class="form-card">
         <h3>☀️ Bem-vindo ao painel!</h3>
         <p>Use o menu para publicar as novidades da Estação Alegria.</p>
-        <p>Você pode adicionar fotos e vídeos à galeria, cadastrar eventos, divulgar promoções e publicar avisos.</p>
+        <p>Adicione fotos e vídeos, cadastre eventos, divulgue promoções,
+        publique avisos e modere as avaliações dos visitantes.</p>
       </article>
+
       <article class="form-card">
         <h3>📌 Seus conteúdos</h3>
         <p>Fotos e vídeos: <strong>${state.fotos.length}</strong></p>
         <p>Eventos: <strong>${state.eventos.length}</strong></p>
         <p>Promoções: <strong>${state.promocoes.length}</strong></p>
         <p>Avisos: <strong>${state.avisos.length}</strong></p>
-        <button class="primary-btn" id="refresh-content" type="button">Atualizar conteúdo</button>
+        <p>Avaliações: <strong>${state.avaliacoes.length}</strong></p>
+        <button class="primary-btn" id="refresh-content" type="button">
+          Atualizar conteúdo
+        </button>
       </article>
     </div>
   `;
 }
 
-/* 9. FOTOS E VÍDEOS */
+/* =========================================================
+   7. AVALIAÇÕES — MODERAÇÃO
+   ========================================================= */
+
+function renderReviewsPage() {
+  const reviews = state.avaliacoes;
+
+  const pending = reviews.filter((item) => item.status === "pendente").length;
+  const approved = reviews.filter((item) => item.status === "aprovada").length;
+  const rejected = reviews.filter((item) => item.status === "rejeitada").length;
+
+  const cards = reviews.map((review) => {
+    const rating = Math.max(1, Math.min(5, Number(review.nota) || 1));
+    const status = ["pendente", "aprovada", "rejeitada"].includes(review.status)
+      ? review.status
+      : "pendente";
+
+    const statusLabels = {
+      pendente: "Pendente",
+      aprovada: "Aprovada",
+      rejeitada: "Rejeitada"
+    };
+
+    return `
+      <article class="item-card">
+        <h3>
+          <span aria-label="${rating} de 5 estrelas">
+            ${"★".repeat(rating)}${"☆".repeat(5 - rating)}
+          </span>
+          ${rating}/5
+        </h3>
+
+        <p>${escapeHTML(review.comentario || "Sem comentário.")}</p>
+
+        <p><strong>Nome:</strong>
+          ${escapeHTML(review.nome_publico || "Anônimo")}
+        </p>
+
+        <p><strong>Data:</strong>
+          ${escapeHTML(formatReviewDate(review.created_at))}
+        </p>
+
+        <p><strong>Status:</strong>
+          ${escapeHTML(statusLabels[status])}
+        </p>
+
+        <div class="item-actions">
+          <button
+            class="primary-btn"
+            type="button"
+            data-review-action="aprovada"
+            data-id="${escapeHTML(review.id)}"
+            ${status === "aprovada" ? "disabled" : ""}
+          >
+            Aprovar
+          </button>
+
+          <button
+            class="delete-btn"
+            type="button"
+            data-review-action="rejeitada"
+            data-id="${escapeHTML(review.id)}"
+            ${status === "rejeitada" ? "disabled" : ""}
+          >
+            Rejeitar
+          </button>
+
+          ${
+            status !== "pendente"
+              ? `<button
+                  type="button"
+                  data-review-action="pendente"
+                  data-id="${escapeHTML(review.id)}"
+                >Voltar para pendente</button>`
+              : ""
+          }
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  return `
+    <div class="content-grid">
+      <article class="form-card">
+        <h3>📊 Resumo das avaliações</h3>
+        <p>Total: <strong>${reviews.length}</strong></p>
+        <p>Pendentes: <strong>${pending}</strong></p>
+        <p>Aprovadas: <strong>${approved}</strong></p>
+        <p>Rejeitadas: <strong>${rejected}</strong></p>
+      </article>
+
+      <article class="form-card">
+        <h3>⭐ Moderação</h3>
+        <p>Somente aprove avaliações que você deseja exibir publicamente.</p>
+        <p>As avaliações rejeitadas não devem aparecer na área pública.</p>
+        <button class="primary-btn" id="refresh-reviews" type="button">
+          Atualizar avaliações
+        </button>
+      </article>
+    </div>
+
+    <div class="item-list">
+      ${
+        cards ||
+        '<div class="empty">Nenhuma avaliação encontrada.</div>'
+      }
+    </div>
+  `;
+}
+
+async function moderateReview(id, status) {
+  if (state.busy) return;
+
+  const actions = {
+    aprovada: "aprovar",
+    rejeitada: "rejeitar",
+    pendente: "devolver para pendente"
+  };
+
+  if (!actions[status]) return;
+
+  const review = state.avaliacoes.find(
+    (item) => String(item.id) === String(id)
+  );
+
+  if (!review) {
+    showMessage("Avaliação não encontrada na lista.", true);
+    return;
+  }
+
+  if (
+    !window.confirm(
+      `Deseja ${actions[status]} a avaliação de ${
+        review.nome_publico || "um visitante"
+      }?`
+    )
+  ) {
+    return;
+  }
+
+  setBusy(true);
+
+  try {
+    const { error } = await supabaseClient.rpc("moderar_avaliacao", {
+      review_id: id,
+      novo_status: status
+    });
+
+    if (error) throw error;
+
+    await loadReviews();
+    renderPage("avaliacoes");
+
+    showMessage("Status da avaliação atualizado com sucesso.");
+  } catch (error) {
+    showMessage(
+      `Erro ao moderar avaliação: ${error.message}`,
+      true
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* =========================================================
+   8. FOTOS E VÍDEOS
+   ========================================================= */
 
 function renderPhotosPage() {
   const cards = state.fotos.map((photo) => {
@@ -463,7 +654,8 @@ function renderPhotosPage() {
 
     const media = video
       ? `<video src="${escapeHTML(photo.imagem_url)}" controls preload="metadata"></video>`
-      : `<img src="${escapeHTML(photo.imagem_url)}" alt="${escapeHTML(photo.nome)}" loading="lazy">`;
+      : `<img src="${escapeHTML(photo.imagem_url)}"
+          alt="${escapeHTML(photo.nome)}" loading="lazy">`;
 
     return `
       <article class="item-card">
@@ -471,7 +663,10 @@ function renderPhotosPage() {
         <h3>${escapeHTML(photo.nome)}</h3>
         <p>Publicado na galeria</p>
         <div class="item-actions">
-          <button class="delete-btn" type="button" data-delete-photo="${escapeHTML(photo.id)}">Excluir arquivo</button>
+          <button class="delete-btn" type="button"
+            data-delete-photo="${escapeHTML(photo.id)}">
+            Excluir arquivo
+          </button>
         </div>
       </article>
     `;
@@ -485,12 +680,15 @@ function renderPhotosPage() {
 
         <div class="field">
           <label for="photo-title">Nome ou legenda</label>
-          <input id="photo-title" name="titulo" type="text" maxlength="120" placeholder="Ex.: Nossa piscina" required>
+          <input id="photo-title" name="titulo" type="text"
+            maxlength="120" placeholder="Ex.: Nossa piscina" required>
         </div>
 
         <div class="field">
           <label for="photo-file">Arquivo de imagem ou vídeo</label>
-          <input id="photo-file" name="arquivo" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" required>
+          <input id="photo-file" name="arquivo" type="file"
+            accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
+            required>
           <small>Limite de 50 MB por arquivo.</small>
         </div>
 
@@ -500,8 +698,7 @@ function renderPhotosPage() {
 
       <article class="form-card">
         <h3>📸 Sua galeria</h3>
-        <p>Os arquivos publicados aparecem abaixo. A exibição no site dos visitantes depende de ele consultar a mesma tabela e o mesmo bucket do Supabase.</p>
-        <p><strong>${state.fotos.length}</strong> arquivo(s) cadastrado(s).</p>
+        <p>Arquivos cadastrados: <strong>${state.fotos.length}</strong></p>
       </article>
     </div>
 
@@ -583,9 +780,6 @@ async function uploadPhoto(event) {
       throw insertError;
     }
 
-    $("#photo-form").reset();
-    $("#file-preview").innerHTML = "";
-
     await loadPhotos();
     renderStats();
     renderPage("fotos");
@@ -603,7 +797,6 @@ function previewSelectedFile() {
 
   if (!preview) return;
   preview.innerHTML = "";
-
   if (!file) return;
 
   if (file.size > MAX_FILE_SIZE) {
@@ -631,6 +824,7 @@ function previewSelectedFile() {
   }
 
   preview.appendChild(element);
+
   const details = document.createElement("p");
   details.textContent = `${file.name} · ${formatFileSize(file.size)}`;
   preview.appendChild(details);
@@ -642,7 +836,9 @@ async function deletePhoto(id) {
   setBusy(true);
 
   try {
-    const photo = state.fotos.find((item) => String(item.id) === String(id));
+    const photo = state.fotos.find(
+      (item) => String(item.id) === String(id)
+    );
 
     if (!photo) throw new Error("Arquivo não encontrado.");
 
@@ -660,7 +856,7 @@ async function deletePhoto(id) {
 
       if (storageError) {
         showMessage(
-          `Registro removido, mas o arquivo no armazenamento não pôde ser apagado: ${storageError.message}`,
+          `Registro removido, mas o arquivo não pôde ser apagado: ${storageError.message}`,
           true
         );
       }
@@ -677,7 +873,9 @@ async function deletePhoto(id) {
   }
 }
 
-/* 10. EVENTOS, PROMOÇÕES E AVISOS */
+/* =========================================================
+   9. EVENTOS, PROMOÇÕES E AVISOS
+   ========================================================= */
 
 function renderContentPage(type) {
   const list = getCurrentList(type);
@@ -692,24 +890,33 @@ function renderContentPage(type) {
       <p>${escapeHTML(item.descricao)}</p>
       ${item.data ? `<p><strong>${escapeHTML(dateLabel)}:</strong> ${escapeHTML(formatDate(item.data))}</p>` : ""}
       <div class="item-actions">
-        <button class="delete-btn" type="button" data-delete-content="${escapeHTML(type)}" data-id="${escapeHTML(item.id)}">Excluir publicação</button>
+        <button class="delete-btn" type="button"
+          data-delete-content="${escapeHTML(type)}"
+          data-id="${escapeHTML(item.id)}">
+          Excluir publicação
+        </button>
       </div>
     </article>
   `).join("");
 
   return `
     <div class="content-grid">
-      <form class="form-card" id="content-form" data-type="${escapeHTML(type)}">
+      <form class="form-card" id="content-form"
+        data-type="${escapeHTML(type)}">
+
         <h3>${isEvent ? "Adicionar evento" : isPromotion ? "Adicionar promoção" : "Publicar aviso"}</h3>
 
         <div class="field">
           <label for="content-title">Título</label>
-          <input id="content-title" name="titulo" maxlength="150" required placeholder="${isEvent ? "Ex.: Música ao vivo" : isPromotion ? "Ex.: Promoção de fim de semana" : "Ex.: Horário de funcionamento"}">
+          <input id="content-title" name="titulo" maxlength="150"
+            required placeholder="${isEvent ? "Ex.: Música ao vivo" : isPromotion ? "Ex.: Promoção de fim de semana" : "Ex.: Horário de funcionamento"}">
         </div>
 
         <div class="field">
           <label for="content-description">Descrição</label>
-          <textarea id="content-description" name="descricao" maxlength="5000" required placeholder="Escreva os detalhes da publicação"></textarea>
+          <textarea id="content-description" name="descricao"
+            maxlength="5000" required
+            placeholder="Escreva os detalhes da publicação"></textarea>
         </div>
 
         ${isEvent || isPromotion ? `
@@ -725,10 +932,10 @@ function renderContentPage(type) {
       <article class="form-card">
         <h3>📌 Dica</h3>
         <p>${isEvent
-          ? "Informe a data e os detalhes para que os visitantes saibam quando o evento acontecerá."
+          ? "Informe a data e os detalhes do evento."
           : isPromotion
-            ? "Descreva a oferta e informe até quando a promoção é válida."
-            : "Use avisos para comunicar novidades e informações importantes aos visitantes."}</p>
+            ? "Descreva a oferta e informe a validade."
+            : "Use avisos para comunicar novidades importantes."}</p>
         <p><strong>${list.length}</strong> publicação(ões) cadastrada(s).</p>
       </article>
     </div>
@@ -764,7 +971,6 @@ async function saveContent(event) {
       showMessage("Preencha a data solicitada.", true);
       return;
     }
-
     row[dateField] = dateValue;
   }
 
@@ -789,7 +995,7 @@ async function saveContent(event) {
 }
 
 async function deleteContent(type, id) {
-  if (!TABLES[type]) return;
+  if (!["eventos", "promocoes", "avisos"].includes(type)) return;
 
   if (!window.confirm("Tem certeza de que deseja excluir esta publicação?")) {
     return;
@@ -816,7 +1022,9 @@ async function deleteContent(type, id) {
   }
 }
 
-/* 11. EVENTOS DOS FORMULÁRIOS E BOTÕES */
+/* =========================================================
+   10. EVENTOS DOS BOTÕES E FORMULÁRIOS
+   ========================================================= */
 
 function attachPageEvents() {
   const contentForm = $("#content-form");
@@ -839,6 +1047,36 @@ function attachPageEvents() {
     refreshButton.addEventListener("click", refreshAllData);
   }
 
+  const refreshReviewsButton = $("#refresh-reviews");
+  if (refreshReviewsButton) {
+    refreshReviewsButton.addEventListener("click", async () => {
+      if (state.busy) return;
+
+      setBusy(true);
+      try {
+        await loadReviews();
+        renderPage("avaliacoes");
+        showMessage("Avaliações atualizadas.");
+      } catch (error) {
+        showMessage(
+          `Erro ao atualizar avaliações: ${error.message}`,
+          true
+        );
+      } finally {
+        setBusy(false);
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-review-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      moderateReview(
+        button.dataset.id,
+        button.dataset.reviewAction
+      );
+    });
+  });
+
   document.querySelectorAll("[data-delete-photo]").forEach((button) => {
     button.addEventListener("click", () => {
       deletePhoto(button.dataset.deletePhoto);
@@ -847,7 +1085,10 @@ function attachPageEvents() {
 
   document.querySelectorAll("[data-delete-content]").forEach((button) => {
     button.addEventListener("click", () => {
-      deleteContent(button.dataset.deleteContent, button.dataset.id);
+      deleteContent(
+        button.dataset.deleteContent,
+        button.dataset.id
+      );
     });
   });
 }
@@ -860,6 +1101,10 @@ function setupNavigation() {
   });
 }
 
+/* =========================================================
+   11. TEMA
+   ========================================================= */
+
 function setupTheme() {
   const savedTheme = localStorage.getItem("estacaoAlegriaTheme");
 
@@ -869,7 +1114,10 @@ function setupTheme() {
 
   updateThemeIcon();
 
-  $("#theme-toggle").addEventListener("click", () => {
+  const toggle = $("#theme-toggle");
+  if (!toggle) return;
+
+  toggle.addEventListener("click", () => {
     document.body.classList.toggle("dark-theme");
 
     localStorage.setItem(
@@ -883,34 +1131,48 @@ function setupTheme() {
 
 function updateThemeIcon() {
   const isDark = document.body.classList.contains("dark-theme");
-  $("#theme-icon").textContent = isDark ? "🌙" : "☀️";
-  $("#theme-toggle").setAttribute(
-    "aria-label",
-    isDark ? "Ativar tema claro" : "Ativar tema escuro"
-  );
+  const icon = $("#theme-icon");
+  const toggle = $("#theme-toggle");
+
+  if (icon) icon.textContent = isDark ? "🌙" : "☀️";
+
+  if (toggle) {
+    toggle.setAttribute(
+      "aria-label",
+      isDark ? "Ativar tema claro" : "Ativar tema escuro"
+    );
+  }
 }
+
+/* =========================================================
+   12. LINK PARA O SITE PÚBLICO
+   ========================================================= */
 
 function setupPreviewLink() {
   const link = $("#preview-link");
+  if (!link) return;
 
-  // Troque pelo endereço público verdadeiro do site dos visitantes.
+  // Coloque aqui o endereço público do site dos visitantes.
   const PUBLIC_SITE_URL = "";
 
   if (PUBLIC_SITE_URL) {
     link.href = PUBLIC_SITE_URL;
     link.target = "_blank";
+    link.rel = "noopener noreferrer";
   } else {
     link.addEventListener("click", (event) => {
       event.preventDefault();
       showMessage(
-        "Configure o endereço público do site dos visitantes em setupPreviewLink().",
+        "Configure o endereço público em setupPreviewLink().",
         true
       );
     });
   }
 }
 
-/* 12. INÍCIO */
+/* =========================================================
+   13. INICIALIZAÇÃO
+   ========================================================= */
 
 async function initializeApp() {
   setupNavigation();
