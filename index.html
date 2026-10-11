@@ -111,7 +111,37 @@
 
     <footer>Estação Alegria © 2026 · Painel administrativo</footer>
   </main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<section class="auth-screen" id="auth-screen">
+  <form class="auth-card" id="auth-form">
+    <div class="auth-logo">☀️</div>
+    <p class="auth-eyebrow">ESTAÇÃO ALEGRIA</p>
+    <h1 id="auth-title">Bem-vindo de volta!</h1>
+    <p class="auth-description" id="auth-description">
+      Entre para administrar seu estabelecimento.
+    </p>
+
+    <label for="auth-email">E-mail</label>
+    <input id="auth-email" type="email"
+           placeholder="seu@email.com" autocomplete="email" required>
+
+    <label for="auth-password">Senha</label>
+    <input id="auth-password" type="password"
+           placeholder="Digite sua senha" minlength="6"
+           autocomplete="current-password" required>
+
+    <button class="primary-btn auth-submit" id="auth-submit" type="submit">
+      Entrar
+    </button>
+
+    <p class="auth-message" id="auth-message" role="status"></p>
+
+    <button class="auth-switch" id="auth-switch" type="button">
+      Ainda não tem conta? Cadastre-se
+    </button>
+  </form>
+</section>
   <script src="script.js"></script>
 </body>
 </html>
