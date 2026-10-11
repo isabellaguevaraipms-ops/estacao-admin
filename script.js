@@ -1,13 +1,14 @@
+// Estação Alegria — Painel administrativo
+// Preencha com os dados PUBLICÁVEIS do seu projeto Supabase.
+// Nunca coloque a chave secret ou service_role aqui.
 
-"use strict";
+const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.com";
+const SUPABASE_ANON_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
 
-/* =========================================================
-   ESTAÇÃO ALEGRIA — PAINEL ADMINISTRATIVO
-   Login, fotos/vídeos, eventos, promoções, avisos e avaliações.
-   ========================================================= */
-
-const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
 
 const MEDIA_BUCKET = "foto";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
