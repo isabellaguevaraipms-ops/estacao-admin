@@ -462,7 +462,7 @@ async function handleSubmit(event) {
         throw new Error("Selecione uma imagem válida.");
       }
 
-      if (file.size > 700 * 1024) {
+      if (file.size > 50 * 1024 * 1024) {
         throw new Error(
           "Escolha uma imagem de até 700 KB."
         );
