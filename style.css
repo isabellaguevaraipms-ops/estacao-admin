@@ -890,3 +890,93 @@ body.authenticated .sidebar,
 body.authenticated .main {
   display: block;
 }
+```css
+/* CORREÇÃO DE ESPAÇAMENTO — PAINEL ADMINISTRATIVO */
+
+.topbar {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.topbar > * {
+  min-width: 0;
+}
+
+.preview-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-height: 44px;
+}
+
+.welcome > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.welcome h2,
+.welcome p {
+  overflow-wrap: break-word;
+}
+
+.sun-art {
+  flex: 0 0 95px;
+  width: 95px;
+  min-width: 95px;
+  min-height: 95px;
+  padding: 0;
+}
+
+#theme-icon {
+  display: block;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Evita que os ícones do menu sejam espremidos */
+.nav-item {
+  min-width: 0;
+}
+
+.nav-item > * {
+  flex-shrink: 0;
+}
+
+.nav-item span {
+  min-width: 0;
+}
+
+/* Ajustes para telas menores */
+@media (max-width: 700px) {
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .welcome {
+    gap: 12px;
+    padding: 22px;
+  }
+
+  .sun-art {
+    flex-basis: 60px;
+    width: 60px;
+    min-width: 60px;
+    height: 60px;
+    min-height: 60px;
+  }
+
+  #theme-icon {
+    font-size: 38px;
+  }
+
+  nav {
+    align-items: stretch;
+  }
+
+  .nav-item {
+    white-space: nowrap;
+  }
+}
+```
