@@ -357,7 +357,16 @@ async function loadPhotos() {
     created_at: row.created_at || ""
   }));
 }
+async function loadReviews() {
+  const { data, error } = await supabaseClient
+    .from(TABLES.avaliacoes)
+    .select("id, nota, comentario, nome_publico, status, created_at")
+    .order("created_at", { ascending: false });
 
+  if (error) throw error;
+
+  state.avaliacoes = data || [];
+}
 async function refreshAllData() {
   if (!supabaseClient) return;
 
