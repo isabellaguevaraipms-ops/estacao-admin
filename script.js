@@ -5,8 +5,7 @@
 
 // Use somente a URL e a chave PUBLICÁVEL do Supabase.
 const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY =
-  "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxqGQ";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EohrXK6tulCPMKavk5GQfw_OxIQkxgQ";
 
 const MEDIA_BUCKET = "foto";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
