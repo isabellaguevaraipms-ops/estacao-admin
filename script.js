@@ -376,6 +376,7 @@ async function refreshAllData() {
       loadContent("promocoes"),
       loadContent("avisos"),
       loadPhotos()
+      loadReviews()
     ]);
 
     renderStats();
