@@ -16,6 +16,7 @@ const state = {
 };
 
 const $ = selector => document.querySelector(selector);
+
 const esc = (value = '') => String(value).replace(/[&<>"']/g, c => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
@@ -28,29 +29,46 @@ const prettyDate = value => {
 
 function notify(message, error = false) {
   let toast = $('#toast');
+
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'toast';
     toast.setAttribute('role', 'status');
+
     Object.assign(toast.style, {
-      position: 'fixed', right: '18px', bottom: '18px', zIndex: '9999',
-      maxWidth: 'min(420px, calc(100vw - 36px))', padding: '14px 18px',
-      borderRadius: '12px', color: '#fff', background: error ? '#b42318' : '#168653',
-      boxShadow: '0 8px 30px #0002', fontWeight: '700'
+      position: 'fixed',
+      right: '18px',
+      bottom: '18px',
+      zIndex: '9999',
+      maxWidth: 'min(420px, calc(100vw - 36px))',
+      padding: '14px 18px',
+      borderRadius: '12px',
+      color: '#fff',
+      background: error ? '#b42318' : '#168653',
+      boxShadow: '0 8px 30px #0002',
+      fontWeight: '700'
     });
+
     document.body.appendChild(toast);
   }
+
   toast.textContent = message;
   toast.style.background = error ? '#b42318' : '#168653';
   toast.hidden = false;
+
   window.clearTimeout(notify.timer);
-  notify.timer = window.setTimeout(() => { toast.hidden = true; }, 4500);
+  notify.timer = window.setTimeout(() => {
+    toast.hidden = true;
+  }, 4500);
 }
 
 function getClient() {
   if (!window.supabase?.createClient) {
-    throw new Error('A biblioteca do Supabase não carregou. Confira sua conexão e os scripts do index.html.');
+    throw new Error(
+      'A biblioteca do Supabase não carregou. Confira os scripts do index.html.'
+    );
   }
+
   return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
@@ -78,12 +96,16 @@ async function refreshCloudData() {
     loadItems('avisos'),
     loadPhotos()
   ]);
+
   updateStats();
 }
 
 async function loadItems(type) {
   const { data, error } = await supabaseClient
-    .from(TABLES[type]).select('*').order('created_at', { ascending: false });
+    .from(TABLES[type])
+    .select('*')
+    .order('created_at', { ascending: false });
+
   if (error) throw error;
 
   state.data[type] = (data || []).map(row => ({
@@ -100,6 +122,7 @@ async function loadPhotos() {
     .from('fotos')
     .select('id,nome,imagem_url,storage_path,created_at')
     .order('created_at', { ascending: false });
+
   if (error) throw error;
 
   state.data.fotos = (data || []).map(row => ({
@@ -109,6 +132,7 @@ async function loadPhotos() {
     image: row.imagem_url || '',
     storagePath: row.storage_path || ''
   }));
+
   updateStats();
 }
 
@@ -118,16 +142,28 @@ function renderPage(page = state.page) {
 
   const title = $('#page-title');
   const sectionTitle = $('#section-title');
+
   if (title) title.textContent = pageNames[state.page];
-  if (sectionTitle) sectionTitle.textContent =
-    state.page === 'inicio' ? 'Conteúdo do estabelecimento' : pageNames[state.page];
+
+  if (sectionTitle) {
+    sectionTitle.textContent =
+      state.page === 'inicio'
+        ? 'Conteúdo do estabelecimento'
+        : pageNames[state.page];
+  }
 
   document.querySelectorAll('.nav-item').forEach(button => {
-    button.classList.toggle('active', button.dataset.page === state.page);
+    button.classList.toggle(
+      'active',
+      button.dataset.page === state.page
+    );
   });
 
-  if (state.page === 'inicio') renderDashboard();
-  else renderManager(state.page);
+  if (state.page === 'inicio') {
+    renderDashboard();
+  } else {
+    renderManager(state.page);
+  }
 }
 
 function renderDashboard() {
@@ -139,6 +175,7 @@ function renderDashboard() {
       <strong>Gerencie seu estabelecimento:</strong>
       acompanhe fotos, vídeos, eventos, promoções e avisos salvos no Supabase.
     </div>
+
     <section class="stats">
       ${[
         ['fotos', 'Fotos e vídeos'],
@@ -152,23 +189,46 @@ function renderDashboard() {
         </article>
       `).join('')}
     </section>
+
     <section class="content-panel">
-      <div class="panel-heading"><h2>Acesso rápido</h2></div>
-      <p>Escolha o que deseja atualizar no site público.</p>
-      <div class="quick-links">
-        <button class="primary-btn" data-go="fotos" type="button">＋ Adicionar foto</button>
-        <button class="primary-btn" data-go="eventos" type="button">＋ Criar evento</button>
-        <button class="primary-btn" data-go="promocoes" type="button">＋ Criar promoção</button>
-        <button class="primary-btn" data-go="avisos" type="button">＋ Publicar aviso</button>
+      <div class="panel-heading">
+        <h2>Acesso rápido</h2>
       </div>
-    </section>`;
+
+      <p>Escolha o que deseja atualizar no site público.</p>
+
+      <div class="quick-links">
+        <button class="primary-btn" data-go="fotos" type="button">
+          ＋ Adicionar foto
+        </button>
+
+        <button class="primary-btn" data-go="eventos" type="button">
+          ＋ Criar evento
+        </button>
+
+        <button class="primary-btn" data-go="promocoes" type="button">
+          ＋ Criar promoção
+        </button>
+
+        <button class="primary-btn" data-go="avisos" type="button">
+          ＋ Publicar aviso
+        </button>
+      </div>
+    </section>
+  `;
 }
 
 function renderManager(type) {
   const content = $('#page-content');
   if (!content) return;
 
-  const labels = { fotos: 'foto ou vídeo', eventos: 'evento', promocoes: 'promoção', avisos: 'aviso' };
+  const labels = {
+    fotos: 'foto ou vídeo',
+    eventos: 'evento',
+    promocoes: 'promoção',
+    avisos: 'aviso'
+  };
+
   const label = labels[type];
   const editing = state.editing;
 
@@ -180,58 +240,125 @@ function renderManager(type) {
           <p>As alterações serão salvas no Supabase.</p>
         </div>
       </div>
+
       <form id="item-form" data-type="${type}">
         <div class="form-grid">
           <div class="field wide">
-            <label for="item-title">${type === 'fotos' ? 'Nome/legenda' : 'Título'} *</label>
-            <input id="item-title" name="title" maxlength="160" required
-              placeholder="Digite o ${label}" value="${esc(editing?.title || '')}">
+            <label for="item-title">
+              ${type === 'fotos' ? 'Nome/legenda' : 'Título'} *
+            </label>
+
+            <input
+              id="item-title"
+              name="title"
+              maxlength="160"
+              required
+              placeholder="Digite o ${label}"
+              value="${esc(editing?.title || '')}"
+            >
           </div>
+
           ${type !== 'fotos' ? `
             <div class="field wide">
               <label for="item-description">Descrição</label>
-              <textarea id="item-description" name="description" maxlength="5000"
-                placeholder="Escreva os detalhes">${esc(editing?.description || '')}</textarea>
-            </div>` : ''}
+              <textarea
+                id="item-description"
+                name="description"
+                maxlength="5000"
+                placeholder="Escreva os detalhes"
+              >${esc(editing?.description || '')}</textarea>
+            </div>
+          ` : ''}
+
           ${type === 'eventos' ? `
             <div class="field">
               <label for="item-date">Data do evento</label>
-              <input id="item-date" name="date" type="date" value="${esc(editing?.data_evento || '')}">
-            </div>` : ''}
+              <input
+                id="item-date"
+                name="date"
+                type="date"
+                value="${esc(editing?.data_evento || '')}"
+              >
+            </div>
+          ` : ''}
+
           ${type === 'promocoes' ? `
             <div class="field">
               <label for="item-date">Validade da promoção</label>
-              <input id="item-date" name="date" type="date" value="${esc(editing?.validade || '')}">
-            </div>` : ''}
+              <input
+                id="item-date"
+                name="date"
+                type="date"
+                value="${esc(editing?.validade || '')}"
+              >
+            </div>
+          ` : ''}
+
           ${type === 'fotos' ? `
             <div class="field wide">
-              <label for="item-image">Arquivo ${editing ? '(opcional para manter o atual)' : '*'}</label>
-              <input id="item-image" name="image" type="file"
+              <label for="item-image">
+                Arquivo ${editing ? '(opcional para manter o atual)' : '*'}
+              </label>
+
+              <input
+                id="item-image"
+                name="image"
+                type="file"
                 accept="image/*,video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg"
-                ${editing ? '' : 'required'}>
+                ${editing ? '' : 'required'}
+              >
+
               <p>Imagens ou vídeos. Tamanho máximo: 50 MB.</p>
-              ${editing?.image ? `<img src="${esc(editing.image)}" alt="Arquivo atual"
-                style="max-width:180px;max-height:120px;object-fit:cover;border-radius:10px">` : ''}
-            </div>` : ''}
+
+              ${editing?.image ? `
+                <img
+                  src="${esc(editing.image)}"
+                  alt="Arquivo atual"
+                  style="max-width:180px;max-height:120px;object-fit:cover;border-radius:10px"
+                >
+              ` : ''}
+            </div>
+          ` : ''}
         </div>
+
         <div class="form-actions">
-          <button class="primary-btn" type="submit">${editing ? 'Salvar alterações' : 'Publicar'}</button>
-          <button class="secondary-btn" id="clear-form" type="button">Limpar</button>
+          <button class="primary-btn" type="submit">
+            ${editing ? 'Salvar alterações' : 'Publicar'}
+          </button>
+
+          <button class="secondary-btn" id="clear-form" type="button">
+            Limpar
+          </button>
         </div>
       </form>
     </section>
 
     <section class="content-panel">
       <div class="panel-heading">
-        <div><h2>Conteúdo cadastrado</h2><p>${state.data[type].length} item(ns)</p></div>
-        <button class="secondary-btn" id="reload-items" type="button">↻ Atualizar</button>
+        <div>
+          <h2>Conteúdo cadastrado</h2>
+          <p>${state.data[type].length} item(ns)</p>
+        </div>
+
+        <button class="secondary-btn" id="reload-items" type="button">
+          ↻ Atualizar
+        </button>
       </div>
+
       ${state.data[type].length
-        ? `<div class="items-grid">${state.data[type].map(item => itemCard(type, item)).join('')}</div>`
-        : `<div class="empty-state"><strong>Nenhum ${label} cadastrado ainda.</strong><p>Use o formulário acima para adicionar o primeiro.</p></div>`}
-    </section>`;
+        ? `<div class="items-grid">
+            ${state.data[type].map(item => itemCard(type, item)).join('')}
+          </div>`
+        : `<div class="empty-state">
+            <strong>Nenhum ${label} cadastrado ainda.</strong>
+            <p>Use o formulário acima para adicionar o primeiro.</p>
+          </div>`
+      }
+    </section>
+  `;
 
   $('#item-form')?.addEventListener('submit', handleSubmit);
+
   $('#clear-form')?.addEventListener('click', () => {
     state.editing = null;
     renderManager(type);
@@ -239,8 +366,12 @@ function renderManager(type) {
 
   $('#reload-items')?.addEventListener('click', async () => {
     try {
-      if (type === 'fotos') await loadPhotos();
-      else await loadItems(type);
+      if (type === 'fotos') {
+        await loadPhotos();
+      } else {
+        await loadItems(type);
+      }
+
       renderManager(type);
       notify('Lista atualizada.');
     } catch (error) {
@@ -250,14 +381,19 @@ function renderManager(type) {
 
   content.querySelectorAll('[data-edit]').forEach(button => {
     button.addEventListener('click', () => {
-      state.editing = state.data[type].find(item => String(item.id) === button.dataset.edit);
+      state.editing = state.data[type].find(
+        item => String(item.id) === button.dataset.edit
+      );
+
       renderManager(type);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   });
 
   content.querySelectorAll('[data-delete]').forEach(button => {
-    button.addEventListener('click', () => deleteItem(type, button.dataset.delete));
+    button.addEventListener('click', () => {
+      deleteItem(type, button.dataset.delete);
+    });
   });
 }
 
@@ -265,12 +401,375 @@ function itemCard(type, item) {
   const title = item.title || 'Sem título';
   const description = item.description || '';
   let meta = '';
-  if (type === 'eventos') meta = `Data: ${prettyDate(item.data_evento)}`;
-  if (type === 'promocoes') meta = `Validade: ${prettyDate(item.validade)}`;
-  if (type === 'fotos') meta = `Adicionada em ${prettyDate(item.created_at)}`;
+
+  if (type === 'eventos') {
+    meta = `Data: ${prettyDate(item.data_evento)}`;
+  }
+
+  if (type === 'promocoes') {
+    meta = `Validade: ${prettyDate(item.validade)}`;
+  }
+
+  if (type === 'fotos') {
+    meta = `Adicionada em ${prettyDate(item.created_at)}`;
+  }
 
   let media = '';
+
   if (type === 'fotos' && item.image) {
+    media = isVideo(item.storagePath, item.image)
+      ? `<video src="${esc(item.image)}" controls playsinline preload="metadata" aria-label="${esc(title)}"></video>`
+      : `<img src="${esc(item.image)}" alt="${esc(title)}" loading="lazy">`;
+  } else if (item.image) {
+    media = `<img src="${esc(item.image)}" alt="${esc(title)}" loading="lazy">`;
+  }
+
+  return `
+    <article class="item-card">
+      ${media}
+
+      <div class="item-body">
+        <h3>${esc(title)}</h3>
+
+        ${description ? `<p>${esc(description)}</p>` : ''}
+        ${meta ? `<div class="item-meta">${esc(meta)}</div>` : ''}
+
+        <div class="item-actions">
+          <button
+            class="secondary-btn"
+            data-edit="${esc(item.id)}"
+            type="button"
+          >Editar</button>
+
+          <button
+            class="danger-btn"
+            data-delete="${esc(item.id)}"
+            type="button"
+          >Excluir</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function isVideo(path = '', url = '') {
+  return /\.(mp4|webm|mov|m4v|ogv|ogg)(?:$|[?#])/i.test(`${path} ${url}`);
+}
+
+async function handleSubmit(event) {
+  event.preventDefault();
+
+  const form = event.currentTarget;
+  const type = form.dataset.type;
+  const title = form.elements.title.value.trim();
+  const description = form.elements.description?.value.trim() || '';
+  const date = form.elements.date?.value || null;
+  const submit = form.querySelector('[type="submit"]');
+  const wasEditing = Boolean(state.editing);
+
+  submit.disabled = true;
+  submit.textContent = 'Salvando...';
+
+  try {
+    if (!title) throw new Error('Digite um título ou nome.');
+
+    if (type === 'fotos') {
+      await savePhoto(title, form.elements.image.files[0] || null);
+    } else {
+      const payload = {
+        titulo: title,
+        descricao: description
+      };
+
+      if (type === 'eventos') payload.data_evento = date;
+      if (type === 'promocoes') payload.validade = date;
+
+      if (state.editing) {
+        const { error } = await supabaseClient
+          .from(TABLES[type])
+          .update(payload)
+          .eq('id', state.editing.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabaseClient
+          .from(TABLES[type])
+          .insert(payload);
+
+        if (error) throw error;
+      }
+
+      await loadItems(type);
+    }
+
+    state.editing = null;
+    await refreshCloudData();
+    renderManager(type);
+    notify('Salvo com sucesso!');
+  } catch (error) {
+    console.error(error);
+    notify(
+      error.message || 'Não foi possível salvar. Confira as políticas do Supabase.',
+      true
+    );
+  } finally {
+    if (submit.isConnected) {
+      submit.disabled = false;
+      submit.textContent = wasEditing ? 'Salvar alterações' : 'Publicar';
+    }
+  }
+}
+
+async function savePhoto(title, file) {
+  if (state.editing && !file) {
+    const { error } = await supabaseClient
+      .from('fotos')
+      .update({ nome: title })
+      .eq('id', state.editing.id);
+
+    if (error) throw error;
+    return;
+  }
+
+  if (!file) throw new Error('Escolha uma imagem ou vídeo.');
+
+  if (file.size > 50 * 1024 * 1024) {
+    throw new Error('O arquivo precisa ter no máximo 50 MB.');
+  }
+
+  const allowedExt = [
+    'jpg', 'jpeg', 'png', 'webp', 'gif', 'avif',
+    'mp4', 'webm', 'mov', 'm4v', 'ogv', 'ogg'
+  ];
+
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+
+  if (!allowedExt.includes(ext)) {
+    throw new Error(
+      'Formato não permitido. Use JPG, PNG, WEBP, GIF, MP4, WEBM, MOV ou OGG.'
+    );
+  }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${crypto.randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabaseClient
+    .storage
+    .from(BUCKET)
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: urlData } = supabaseClient
+    .storage
+    .from(BUCKET)
+    .getPublicUrl(path);
+
+  const imageUrl = urlData.publicUrl;
+
+  try {
+    if (state.editing) {
+      const old = state.editing;
+
+      const { error } = await supabaseClient
+        .from('fotos')
+        .update({
+          nome: title,
+          imagem_url: imageUrl,
+          storage_path: path
+        })
+        .eq('id', old.id);
+
+      if (error) throw error;
+
+      if (old.storagePath) {
+        const { error: removeError } = await supabaseClient
+          .storage
+          .from(BUCKET)
+          .remove([old.storagePath]);
+
+        if (removeError) {
+          console.warn('Arquivo antigo não removido:', removeError.message);
+        }
+      }
+    } else {
+      const { error } = await supabaseClient
+        .from('fotos')
+        .insert({
+          nome: title,
+          imagem_url: imageUrl,
+          storage_path: path
+        });
+
+      if (error) throw error;
+    }
+  } catch (error) {
+    await supabaseClient.storage.from(BUCKET).remove([path]);
+    throw error;
+  }
+}
+
+async function deleteItem(type, id) {
+  const item = state.data[type].find(
+    row => String(row.id) === String(id)
+  );
+
+  if (!item || !window.confirm(
+    `Tem certeza que deseja excluir ${type === 'fotos' ? 'esta foto/vídeo' : 'este item'}?`
+  )) return;
+
+  try {
+    if (type === 'fotos' && item.storagePath) {
+      const { error } = await supabaseClient
+        .storage
+        .from(BUCKET)
+        .remove([item.storagePath]);
+
+      if (error) throw error;
+    }
+
+    const { error } = await supabaseClient
+      .from(TABLES[type])
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    if (type === 'fotos') {
+      await loadPhotos();
+    } else {
+      await loadItems(type);
+    }
+
+    updateStats();
+    renderManager(type);
+    notify('Item excluído.');
+  } catch (error) {
+    console.error(error);
+    notify(
+      error.message || 'Não foi possível excluir. Confira as políticas do Supabase.',
+      true
+    );
+  }
+}
+
+/* Cria o botão de tema mesmo se ele tiver sumido do HTML. */
+function setupThemeToggle() {
+  let themeButton = document.getElementById('theme-toggle');
+
+  if (!themeButton) {
+    const topbar = document.querySelector('.topbar');
+
+    if (topbar) {
+      themeButton = document.createElement('button');
+      themeButton.id = 'theme-toggle';
+      themeButton.type = 'button';
+      themeButton.innerHTML = '<span id="theme-icon">☀️</span>';
+      themeButton.setAttribute('aria-label', 'Ativar modo escuro');
+      themeButton.title = 'Alternar modo claro/escuro';
+      topbar.appendChild(themeButton);
+    }
+  }
+
+  if (!themeButton) {
+    console.warn('Botão de tema não criado: elemento .topbar não encontrado.');
+    return;
+  }
+
+  if (!document.getElementById('theme-fix-styles')) {
+    const style = document.createElement('style');
+    style.id = 'theme-fix-styles';
+
+    style.textContent = `
+      #theme-toggle {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        margin: 0 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        background: #fff;
+        color: #111827;
+        cursor: pointer;
+        font-size: 22px;
+        position: relative;
+        z-index: 10;
+      }
+
+      body.theme-dark {
+        background: #111827 !important;
+        color: #f3f4f6 !important;
+      }
+
+      body.theme-dark .sidebar,
+      body.theme-dark .topbar,
+      body.theme-dark .content-panel,
+      body.theme-dark .stat-card,
+      body.theme-dark .notice,
+      body.theme-dark .item-card {
+        background: #1f2937 !important;
+        color: #f3f4f6 !important;
+        border-color: #374151 !important;
+      }
+
+      body.theme-dark .main,
+      body.theme-dark #page-content {
+        color: #f3f4f6 !important;
+      }
+
+      body.theme-dark h1,
+      body.theme-dark h2,
+      body.theme-dark h3,
+      body.theme-dark p,
+      body.theme-dark label,
+      body.theme-dark span {
+        color: inherit;
+      }
+
+      body.theme-dark input,
+      body.theme-dark textarea,
+      body.theme-dark select {
+        background: #111827 !important;
+        color: #f3f4f6 !important;
+        border-color: #4b5563 !important;
+      }
+
+      body.theme-dark #theme-toggle {
+        background: #374151 !important;
+        color: #fff !important;
+        border-color: #4b5563 !important;
+      }
+
+      .quick-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .quick-links button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 16px;
+        border: 0;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  if (!themeButton.dataset.themeHandlerAttached) {
+    themeButton.dataset.themeHandlerAttached = 'true';
+
+    themeButton.addEventListener('click'image) {
     media = isVideo(item.storagePath, item.image)
       ? `<video src="${esc(item.image)}" controls playsinline preload="metadata" aria-label="${esc(title)}"></video>`
       : `<img src="${esc(item.image)}" alt="${esc(title)}" loading="lazy">`;
