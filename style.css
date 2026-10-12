@@ -660,3 +660,53 @@ body.authenticated .main {
   display: block;
 }
 
+/* Botão de alternar tema */
+#theme-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1f2937;
+  cursor: pointer;
+  font-size: 22px;
+  transition: background 0.2s, transform 0.2s;
+}
+
+#theme-toggle:hover {
+  transform: scale(1.05);
+}
+
+/* Tema escuro */
+body.theme-dark {
+  background: #111827;
+  color: #f3f4f6;
+}
+
+body.theme-dark .main,
+body.theme-dark .content-panel,
+body.theme-dark .stat-card {
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+
+body.theme-dark .content-panel p,
+body.theme-dark .stat-card span {
+  color: #d1d5db;
+}
+
+body.theme-dark input,
+body.theme-dark textarea {
+  background: #111827;
+  color: #f3f4f6;
+  border-color: #4b5563;
+}
+
+body.theme-dark #theme-toggle {
+  background: #374151;
+  color: #ffffff;
+  border-color: #4b5563;
+}
