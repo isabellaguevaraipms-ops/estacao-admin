@@ -1,419 +1,471 @@
 
-"use strict";
+/* Estação Alegria — painel administrativo sem tela de login.
+   Atenção: sem autenticação, a segurança depende das políticas do Supabase.
+   Use somente a chave publicável no navegador; nunca use service_role/secret key. */
 
-/* 1. CONFIGURAÇÃO */
-const SUPABASE_URL = "https://ggxhghszthcgnkecoiir.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EohrXK6tulCPMKavpK5GQfw_OxIQkxgQ";
-const MEDIA_BUCKET = "foto";
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
-const TABLES = {
-  eventos: "eventos",
-  promocoes: "promocoes",
-  avisos: "avisos",
-  fotos: "fotos"
-};
-
-const TITLES = {
-  inicio: "Visão geral",
-  fotos: "Fotos e vídeos",
-  eventos: "Eventos",
-  promocoes: "Promoções",
-  avisos: "Avisos"
-};
-
-const SECTION_TITLES = {
-  inicio: "Conteúdo do estabelecimento",
-  fotos: "Galeria de fotos e vídeos",
-  eventos: "Gerenciar eventos",
-  promocoes: "Gerenciar promoções",
-  avisos: "Gerenciar avisos"
-};
+const SUPABASE_URL = 'https://ggxhghszthcgnkecoiir.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_EohrXK6tulCPMKavpK5GQfw_OxIQkxgQ';
+const TABLES = { fotos: 'fotos', eventos: 'eventos', promocoes: 'promocoes', avisos: 'avisos' };
+const BUCKET = 'foto';
 
 const state = {
-  page: "inicio",
-  eventos: [],
-  promocoes: [],
-  avisos: [],
-  fotos: [],
-  busy: false,
-  authMode: "login"
+  page: 'inicio',
+  editing: null,
+  data: { fotos: [], eventos: [], promocoes: [], avisos: [] },
+  dark: false
 };
 
-let supabaseClient = null;
-let authSubscription = null;
+const $ = selector => document.querySelector(selector);
+const esc = (value = '') => String(value).replace(/[&<>"']/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[c]));
 
-const $ = (selector) => document.querySelector(selector);
+const prettyDate = value => {
+  if (!value) return 'Sem data';
+  const date = new Date(value.length === 10 ? `${value}T12:00:00` : value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR');
+};
 
-/* 2. UTILITÁRIOS */
-
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
-
-function showMessage(message, isError = false) {
-  const el = $("#global-message");
-  if (!el) return;
-  el.textContent = message;
-  el.style.color = isError ? "#c53d3d" : "#16845e";
-}
-
-function showAuthMessage(message, isError = true) {
-  const el = $("#auth-message");
-  if (!el) return;
-  el.textContent = message;
-  el.style.color = isError ? "#b33b3b" : "#16845e";
-}
-
-function setBusy(value) {
-  state.busy = value;
-  document.querySelectorAll(
-    ".form-card button, .item-actions button, #auth-submit"
-  ).forEach((button) => {
-    button.disabled = value;
-  });
-}
-
-function formatDate(value) {
-  if (!value) return "";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat("pt-BR").format(date);
-}
-
-function isVideoFile(file) {
-  return Boolean(file && file.type.startsWith("video/"));
-}
-
-function isImageFile(file) {
-  return Boolean(file && file.type.startsWith("image/"));
-}
-
-function formatFileSize(bytes) {
-  if (bytes < 1024 * 1024) {
-    return `${Math.round(bytes / 1024)} KB`;
+function notify(message, error = false) {
+  let toast = $('#toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.setAttribute('role', 'status');
+    Object.assign(toast.style, {
+      position: 'fixed', right: '18px', bottom: '18px', zIndex: '9999',
+      maxWidth: 'min(420px, calc(100vw - 36px))', padding: '14px 18px',
+      borderRadius: '12px', color: '#fff', background: error ? '#b42318' : '#168653',
+      boxShadow: '0 8px 30px #0002', fontWeight: '700'
+    });
+    document.body.appendChild(toast);
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  toast.textContent = message;
+  toast.style.background = error ? '#b42318' : '#168653';
+  toast.hidden = false;
+  window.clearTimeout(notify.timer);
+  notify.timer = window.setTimeout(() => { toast.hidden = true; }, 4500);
 }
 
-function getFileExtension(file) {
-  const match = (file.name || "").match(/\.([a-zA-Z0-9]+)$/);
-  return match ? match[1].toLowerCase() : "";
-}
-
-function makeSafeFileName(name) {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9._-]/g, "-")
-    .replace(/-+/g, "-")
-    .slice(-100);
-}
-
-function getDateField(type) {
-  return type === "eventos" ? "data_evento" : "validade";
-}
-
-function mapDatabaseRow(type, row) {
-  const dateField = getDateField(type);
-  return {
-    id: row.id,
-    titulo: row.titulo || "",
-    descricao: row.descricao || "",
-    data: row[dateField] || "",
-    created_at: row.created_at || ""
-  };
-}
-
-function getCurrentList(type) {
-  return state[type] || [];
-}
-
-/* 3. SUPABASE */
-
-function initializeSupabase() {
+function getClient() {
   if (!window.supabase?.createClient) {
-    throw new Error(
-      "A biblioteca do Supabase não carregou. Confira os scripts no HTML."
-    );
+    throw new Error('A biblioteca do Supabase não carregou. Confira sua conexão e os scripts do index.html.');
   }
-
-  supabaseClient = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_PUBLISHABLE_KEY
-  );
+  return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-/* 4. LOGIN E CADASTRO */
+let supabaseClient;
 
-function updateAuthMode() {
-  const signup = state.authMode === "signup";
-  const title = $("#auth-title");
-  const description = $("#auth-description");
-  const submit = $("#auth-submit");
-  const toggle = $("#auth-switch");
-  const password = $("#auth-password");
+const pageNames = {
+  inicio: 'Visão geral',
+  fotos: 'Fotos e vídeos',
+  eventos: 'Eventos',
+  promocoes: 'Promoções',
+  avisos: 'Avisos'
+};
 
-  if (title) title.textContent = signup ? "Criar uma conta" : "Bem-vindo de volta!";
-  if (description) {
-    description.textContent = signup
-      ? "Cadastre-se para acessar o painel administrativo."
-      : "Entre para administrar seu estabelecimento.";
-  }
-  if (submit) submit.textContent = signup ? "Criar conta" : "Entrar";
-  if (toggle) {
-    toggle.textContent = signup
-      ? "Já tem uma conta? Entrar"
-      : "Ainda não tem conta? Cadastre-se";
-  }
-  if (password) password.autocomplete = signup ? "new-password" : "current-password";
-
-  showAuthMessage("");
-}
-
-async function handleAuthSubmit(event) {
-  event.preventDefault();
-
-  if (state.busy) return;
-
-  const email = $("#auth-email")?.value.trim();
-  const password = $("#auth-password")?.value;
-
-  if (!email || !password) {
-    showAuthMessage("Preencha o e-mail e a senha.");
-    return;
-  }
-
-  setBusy(true);
-  showAuthMessage("Conectando ao Supabase...", false);
-
-  try {
-    if (!supabaseClient) initializeSupabase();
-
-    let result;
-
-    if (state.authMode === "signup") {
-      result = await supabaseClient.auth.signUp({ email, password });
-    } else {
-      result = await supabaseClient.auth.signInWithPassword({
-        email,
-        password
-      });
-    }
-
-    if (result.error) throw result.error;
-
-    if (state.authMode === "signup" && !result.data.session) {
-      showAuthMessage(
-        "Cadastro recebido! Confira seu e-mail para confirmar a conta.",
-        false
-      );
-      return;
-    }
-
-    if (result.data.session) {
-      setAuthenticated(true);
-      showAuthMessage("Acesso autorizado.", false);
-      await refreshAllData();
-    } else {
-      showAuthMessage(
-        "Operação concluída. Confira seu e-mail para continuar.",
-        false
-      );
-    }
-  } catch (error) {
-    showAuthMessage(error.message || "Não foi possível autenticar.");
-  } finally {
-    setBusy(false);
+function updateStats() {
+  for (const type of Object.keys(TABLES)) {
+    const element = document.getElementById(`total-${type}`);
+    if (element) element.textContent = state.data[type].length;
   }
 }
 
-async function handleLogout() {
-  if (!supabaseClient) return;
-  if (!window.confirm("Deseja sair do painel?")) return;
-
-  const { error } = await supabaseClient.auth.signOut();
-
-  if (error) showMessage(`Não foi possível sair: ${error.message}`, true);
+async function refreshCloudData() {
+  await Promise.all([
+    loadItems('eventos'),
+    loadItems('promocoes'),
+    loadItems('avisos'),
+    loadPhotos()
+  ]);
+  updateStats();
 }
 
-/* 5. SESSÃO */
-
-function setAuthenticated(authenticated) {
-  document.body.classList.toggle("authenticated", authenticated);
-
-  const screen = $("#auth-screen");
-  if (screen) screen.hidden = authenticated;
-
-  const panel = $("#admin-panel");
-  if (panel) panel.hidden = !authenticated;
-}
-
-function clearData() {
-  state.eventos = [];
-  state.promocoes = [];
-  state.avisos = [];
-  state.fotos = [];
-}
-
-async function restoreAuthSession() {
-  const { data, error } = await supabaseClient.auth.getSession();
-  if (error) throw error;
-
-  setAuthenticated(Boolean(data.session));
-
-  if (data.session) await refreshAllData();
-}
-
-function listenForAuthChanges() {
-  const { data } = supabaseClient.auth.onAuthStateChange(
-    (event, session) => {
-      setAuthenticated(Boolean(session));
-
-      if (event === "SIGNED_OUT") {
-        clearData();
-        renderStats();
-        renderPage("inicio");
-      }
-    }
-  );
-
-  authSubscription = data?.subscription || null;
-}
-
-/* 6. CARREGAR CONTEÚDO */
-
-async function loadContent(type) {
+async function loadItems(type) {
   const { data, error } = await supabaseClient
-    .from(TABLES[type])
-    .select("*")
-    .order("created_at", { ascending: false });
-
+    .from(TABLES[type]).select('*').order('created_at', { ascending: false });
   if (error) throw error;
-  state[type] = (data || []).map((row) => mapDatabaseRow(type, row));
+
+  state.data[type] = (data || []).map(row => ({
+    ...row,
+    title: row.titulo || row.nome || '',
+    description: row.descricao || '',
+    date: row.data_evento || row.validade || '',
+    image: row.imagem_url || ''
+  }));
 }
 
 async function loadPhotos() {
   const { data, error } = await supabaseClient
-    .from(TABLES.fotos)
-    .select("id, nome, imagem_url, storage_path, created_at")
-    .order("created_at", { ascending: false });
-
+    .from('fotos')
+    .select('id,nome,imagem_url,storage_path,created_at')
+    .order('created_at', { ascending: false });
   if (error) throw error;
 
-  state.fotos = (data || []).map((row) => ({
-    id: row.id,
-    nome: row.nome || "Arquivo",
-    imagem_url: row.imagem_url || "",
-    storage_path: row.storage_path || "",
-    created_at: row.created_at || ""
+  state.data.fotos = (data || []).map(row => ({
+    ...row,
+    title: row.nome || '',
+    description: '',
+    image: row.imagem_url || '',
+    storagePath: row.storage_path || ''
   }));
+  updateStats();
 }
 
-async function refreshAllData() {
-  if (!supabaseClient) return;
+function renderPage(page = state.page) {
+  state.page = pageNames[page] ? page : 'inicio';
+  state.editing = null;
+
+  const title = $('#page-title');
+  const sectionTitle = $('#section-title');
+  if (title) title.textContent = pageNames[state.page];
+  if (sectionTitle) sectionTitle.textContent =
+    state.page === 'inicio' ? 'Conteúdo do estabelecimento' : pageNames[state.page];
+
+  document.querySelectorAll('.nav-item').forEach(button => {
+    button.classList.toggle('active', button.dataset.page === state.page);
+  });
+
+  if (state.page === 'inicio') renderDashboard();
+  else renderManager(state.page);
+}
+
+function renderDashboard() {
+  const content = $('#page-content');
+  if (!content) return;
+
+  content.innerHTML = `
+    <div class="notice">
+      <strong>Gerencie seu estabelecimento:</strong>
+      acompanhe fotos, vídeos, eventos, promoções e avisos salvos no Supabase.
+    </div>
+    <section class="stats">
+      ${[
+        ['fotos', 'Fotos e vídeos'],
+        ['eventos', 'Eventos'],
+        ['promocoes', 'Promoções'],
+        ['avisos', 'Avisos']
+      ].map(([key, label]) => `
+        <article class="stat-card">
+          <span>${label}</span>
+          <strong>${state.data[key].length}</strong>
+        </article>
+      `).join('')}
+    </section>
+    <section class="content-panel">
+      <div class="panel-heading"><h2>Acesso rápido</h2></div>
+      <p>Escolha o que deseja atualizar no site público.</p>
+      <div class="quick-links">
+        <button class="primary-btn" data-go="fotos" type="button">＋ Adicionar foto</button>
+        <button class="primary-btn" data-go="eventos" type="button">＋ Criar evento</button>
+        <button class="primary-btn" data-go="promocoes" type="button">＋ Criar promoção</button>
+        <button class="primary-btn" data-go="avisos" type="button">＋ Publicar aviso</button>
+      </div>
+    </section>`;
+}
+
+function renderManager(type) {
+  const content = $('#page-content');
+  if (!content) return;
+
+  const labels = { fotos: 'foto ou vídeo', eventos: 'evento', promocoes: 'promoção', avisos: 'aviso' };
+  const label = labels[type];
+  const editing = state.editing;
+
+  content.innerHTML = `
+    <section class="content-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>${editing ? 'Editar' : 'Adicionar'} ${label}</h2>
+          <p>As alterações serão salvas no Supabase.</p>
+        </div>
+      </div>
+      <form id="item-form" data-type="${type}">
+        <div class="form-grid">
+          <div class="field wide">
+            <label for="item-title">${type === 'fotos' ? 'Nome/legenda' : 'Título'} *</label>
+            <input id="item-title" name="title" maxlength="160" required
+              placeholder="Digite o ${label}" value="${esc(editing?.title || '')}">
+          </div>
+          ${type !== 'fotos' ? `
+            <div class="field wide">
+              <label for="item-description">Descrição</label>
+              <textarea id="item-description" name="description" maxlength="5000"
+                placeholder="Escreva os detalhes">${esc(editing?.description || '')}</textarea>
+            </div>` : ''}
+          ${type === 'eventos' ? `
+            <div class="field">
+              <label for="item-date">Data do evento</label>
+              <input id="item-date" name="date" type="date" value="${esc(editing?.data_evento || '')}">
+            </div>` : ''}
+          ${type === 'promocoes' ? `
+            <div class="field">
+              <label for="item-date">Validade da promoção</label>
+              <input id="item-date" name="date" type="date" value="${esc(editing?.validade || '')}">
+            </div>` : ''}
+          ${type === 'fotos' ? `
+            <div class="field wide">
+              <label for="item-image">Arquivo ${editing ? '(opcional para manter o atual)' : '*'}</label>
+              <input id="item-image" name="image" type="file"
+                accept="image/*,video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg"
+                ${editing ? '' : 'required'}>
+              <p>Imagens ou vídeos. Tamanho máximo: 50 MB.</p>
+              ${editing?.image ? `<img src="${esc(editing.image)}" alt="Arquivo atual"
+                style="max-width:180px;max-height:120px;object-fit:cover;border-radius:10px">` : ''}
+            </div>` : ''}
+        </div>
+        <div class="form-actions">
+          <button class="primary-btn" type="submit">${editing ? 'Salvar alterações' : 'Publicar'}</button>
+          <button class="secondary-btn" id="clear-form" type="button">Limpar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="content-panel">
+      <div class="panel-heading">
+        <div><h2>Conteúdo cadastrado</h2><p>${state.data[type].length} item(ns)</p></div>
+        <button class="secondary-btn" id="reload-items" type="button">↻ Atualizar</button>
+      </div>
+      ${state.data[type].length
+        ? `<div class="items-grid">${state.data[type].map(item => itemCard(type, item)).join('')}</div>`
+        : `<div class="empty-state"><strong>Nenhum ${label} cadastrado ainda.</strong><p>Use o formulário acima para adicionar o primeiro.</p></div>`}
+    </section>`;
+
+  $('#item-form')?.addEventListener('submit', handleSubmit);
+  $('#clear-form')?.addEventListener('click', () => {
+    state.editing = null;
+    renderManager(type);
+  });
+
+  $('#reload-items')?.addEventListener('click', async () => {
+    try {
+      if (type === 'fotos') await loadPhotos();
+      else await loadItems(type);
+      renderManager(type);
+      notify('Lista atualizada.');
+    } catch (error) {
+      notify(error.message || 'Não foi possível atualizar.', true);
+    }
+  });
+
+  content.querySelectorAll('[data-edit]').forEach(button => {
+    button.addEventListener('click', () => {
+      state.editing = state.data[type].find(item => String(item.id) === button.dataset.edit);
+      renderManager(type);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  content.querySelectorAll('[data-delete]').forEach(button => {
+    button.addEventListener('click', () => deleteItem(type, button.dataset.delete));
+  });
+}
+
+function itemCard(type, item) {
+  const title = item.title || 'Sem título';
+  const description = item.description || '';
+  let meta = '';
+  if (type === 'eventos') meta = `Data: ${prettyDate(item.data_evento)}`;
+  if (type === 'promocoes') meta = `Validade: ${prettyDate(item.validade)}`;
+  if (type === 'fotos') meta = `Adicionada em ${prettyDate(item.created_at)}`;
+
+  let media = '';
+  if (type === 'fotos' && item.image) {
+    media = isVideo(item.storagePath, item.image)
+      ? `<video src="${esc(item.image)}" controls playsinline preload="metadata" aria-label="${esc(title)}"></video>`
+      : `<img src="${esc(item.image)}" alt="${esc(title)}" loading="lazy">`;
+  } else if (item.image) {
+    media = `<img src="${esc(item.image)}" alt="${esc(title)}" loading="lazy">`;
+  }
+
+  return `<article class="item-card">
+    ${media}
+    <div class="item-body">
+      <h3>${esc(title)}</h3>
+      ${description ? `<p>${esc(description)}</p>` : ''}
+      ${meta ? `<div class="item-meta">${esc(meta)}</div>` : ''}
+      <div class="item-actions">
+        <button class="secondary-btn" data-edit="${esc(item.id)}" type="button">Editar</button>
+        <button class="danger-btn" data-delete="${esc(item.id)}" type="button">Excluir</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+function isVideo(path = '', url = '') {
+  return /\.(mp4|webm|mov|m4v|ogv|ogg)(?:$|[?#])/i.test(`${path} ${url}`);
+}
+
+async function handleSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const type = form.dataset.type;
+  const title = form.elements.title.value.trim();
+  const description = form.elements.description?.value.trim() || '';
+  const date = form.elements.date?.value || null;
+  const submit = form.querySelector('[type="submit"]');
+
+  submit.disabled = true;
+  submit.textContent = 'Salvando...';
 
   try {
-    await Promise.all([
-      loadContent("eventos"),
-      loadContent("promocoes"),
-      loadContent("avisos"),
-      loadPhotos()
-    ]);
+    if (!title) throw new Error('Digite um título ou nome.');
 
-    renderStats();
-    renderPage(state.page);
-    showMessage("Conteúdo atualizado.");
+    if (type === 'fotos') {
+      await savePhoto(title, form.elements.image.files[0] || null);
+    } else {
+      const payload = { titulo: title, descricao: description };
+      if (type === 'eventos') payload.data_evento = date;
+      if (type === 'promocoes') payload.validade = date;
+
+      if (state.editing) {
+        const { error } = await supabaseClient.from(TABLES[type])
+          .update(payload).eq('id', state.editing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabaseClient.from(TABLES[type]).insert(payload);
+        if (error) throw error;
+      }
+      await loadItems(type);
+    }
+
+    state.editing = null;
+    await refreshCloudData();
+    renderManager(type);
+    notify('Salvo com sucesso!');
   } catch (error) {
-    showMessage(`Erro ao carregar conteúdo: ${error.message}`, true);
+    console.error(error);
+    notify(error.message || 'Não foi possível salvar. Confira as políticas do Supabase.', true);
+  } finally {
+    if (submit.isConnected) {
+      submit.disabled = false;
+      submit.textContent = state.editing ? 'Salvar alterações' : 'Publicar';
+    }
   }
 }
 
-/* 7. CONTADORES */
+async function savePhoto(title, file) {
+  if (state.editing && !file) {
+    const { error } = await supabaseClient.from('fotos')
+      .update({ nome: title }).eq('id', state.editing.id);
+    if (error) throw error;
+    return;
+  }
+  if (!file) throw new Error('Escolha uma imagem ou vídeo.');
+  if (file.size > 50 * 1024 * 1024) throw new Error('O arquivo precisa ter no máximo 50 MB.');
 
-function renderStats() {
-  const values = {
-    "#total-fotos": state.fotos.length,
-    "#total-eventos": state.eventos.length,
-    "#total-promocoes": state.promocoes.length,
-    "#total-avisos": state.avisos.length
-  };
+  const allowedExt = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'mp4', 'webm', 'mov', 'm4v', 'ogv', 'ogg'];
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!allowedExt.includes(ext)) throw new Error('Formato não permitido. Use JPG, PNG, WEBP, GIF, MP4, WEBM, MOV ou OGG.');
 
-  Object.entries(values).forEach(([selector, value]) => {
-    const el = $(selector);
-    if (el) el.textContent = value;
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${crypto.randomUUID()}-${safeName}`;
+  const { error: uploadError } = await supabaseClient.storage.from(BUCKET)
+    .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type });
+  if (uploadError) throw uploadError;
+
+  const { data: urlData } = supabaseClient.storage.from(BUCKET).getPublicUrl(path);
+  const imageUrl = urlData.publicUrl;
+
+  try {
+    if (state.editing) {
+      const old = state.editing;
+      const { error } = await supabaseClient.from('fotos')
+        .update({ nome: title, imagem_url: imageUrl, storage_path: path }).eq('id', old.id);
+      if (error) throw error;
+      if (old.storagePath) {
+        const { error: removeError } = await supabaseClient.storage.from(BUCKET).remove([old.storagePath]);
+        if (removeError) console.warn('Arquivo antigo não removido:', removeError.message);
+      }
+    } else {
+      const { error } = await supabaseClient.from('fotos')
+        .insert({ nome: title, imagem_url: imageUrl, storage_path: path });
+      if (error) throw error;
+    }
+  } catch (error) {
+    await supabaseClient.storage.from(BUCKET).remove([path]);
+    throw error;
+  }
+}
+
+async function deleteItem(type, id) {
+  const item = state.data[type].find(row => String(row.id) === String(id));
+  if (!item || !window.confirm(`Tem certeza que deseja excluir ${type === 'fotos' ? 'esta foto/vídeo' : 'este item'}?`)) return;
+
+  try {
+    if (type === 'fotos' && item.storagePath) {
+      const { error } = await supabaseClient.storage.from(BUCKET).remove([item.storagePath]);
+      if (error) throw error;
+    }
+    const { error } = await supabaseClient.from(TABLES[type]).delete().eq('id', id);
+    if (error) throw error;
+
+    if (type === 'fotos') await loadPhotos();
+    else await loadItems(type);
+
+    updateStats();
+    renderManager(type);
+    notify('Item excluído.');
+  } catch (error) {
+    console.error(error);
+    notify(error.message || 'Não foi possível excluir. Confira as políticas do Supabase.', true);
+  }
+}
+
+function initPanel() {
+  // Retira qualquer tela de login remanescente no HTML.
+  $('#auth-screen')?.remove();
+
+  // O HTML enviado não tem um contêiner #app: usa o layout existente diretamente.
+  const main = $('main.main');
+  if (main) main.hidden = false;
+  document.body.classList.add('authenticated');
+
+  document.querySelectorAll('.nav-item').forEach(button => {
+    button.addEventListener('click', () => renderPage(button.dataset.page));
   });
-}
 
-/* 8. NAVEGAÇÃO */
-
-function navigateTo(page) {
-  if (!TITLES[page]) return;
-
-  state.page = page;
-
-  document.querySelectorAll(".nav-item").forEach((button) => {
-    button.classList.toggle("active", button.dataset.page === page);
+  $('#page-content')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-go]');
+    if (button) renderPage(button.dataset.go);
   });
 
-  renderPage(page);
-}
+  $('#theme-toggle')?.addEventListener('click', () => {
+    state.dark = !state.dark;
+    document.body.classList.toggle('theme-dark', state.dark);
+    const icon = $('#theme-icon');
+    if (icon) icon.textContent = state.dark ? '🌙' : '☀️';
+  });
 
-function renderPage(page) {
-  const container = $("#page-content");
-  if (!container) return;
+  // Sem autenticação, o botão de sair não tem função; removê-lo evita confusão.
+  $('#logout-btn')?.remove();
 
-  state.page = page;
+  const preview = $('#preview-link');
+  if (preview) preview.href = 'https://estacao-alegria-site-2.vercel.app/';
 
-  const pageTitle = $("#page-title");
-  const sectionTitle = $("#section-title");
+  renderPage('inicio');
 
-  if (pageTitle) pageTitle.textContent = TITLES[page] || TITLES.inicio;
-  if (sectionTitle) {
-    sectionTitle.textContent = SECTION_TITLES[page] || SECTION_TITLES.inicio;
+  try {
+    supabaseClient = getClient();
+  } catch (error) {
+    notify(error.message, true);
+    return;
   }
 
-  if (page === "inicio") {
-    container.innerHTML = renderHome();
-  } else if (page === "fotos") {
-    container.innerHTML = renderPhotosPage();
-  } else {
-    container.innerHTML = renderContentPage(page);
-  }
-
-  attachPageEvents();
+  refreshCloudData()
+    .then(() => renderPage(state.page))
+    .catch(error => {
+      console.error(error);
+      notify(error.message || 'Erro ao carregar dados do Supabase.', true);
+    });
 }
 
-function renderHome() {
-  return `
-    <div class="content-grid">
-      <article class="form-card">
-        <h3>☀️ Bem-vindo ao painel!</h3>
-        <p>Use o menu para publicar as novidades da Estação Alegria.</p>
-        <p>Adicione fotos e vídeos, eventos, promoções e avisos.</p>
-      </article>
-      <article class="form-card">
-        <h3>📌 Seus conteúdos</h3>
-        <p>Fotos e vídeos: <strong>${state.fotos.length}</strong></p>
-        <p>Eventos: <strong>${state.eventos.length}</strong></p>
-        <p>Promoções: <strong>${state.promocoes.length}</strong></p>
-        <p>Avisos: <strong>${state.avisos.length}</strong></p>
-        <button class="primary-btn" id="refresh-content" type="button">
-          Atualizar conteúdo
-        </button>
-      </article>
-    </div>`;
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPanel);
+} else {
+  initPanel();
 }
-
-/* 9. FOTOS E VÍDEOS */
-
-function renderPhotosPage() {
+2n renderPhotosPage() {
   const cards = state.fotos.map((photo) => {
     const video = /\.(mp4|webm|ogg|mov|m4v)$/i.test(
       `${photo.nome} ${photo.imagem_url}`
